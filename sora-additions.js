@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Sora - Downloader
 // @namespace    http://tampermonkey.net/
-// @version      2.5 (The Sentinel)
-// @description  A smart, adaptive interface that auto-updates upon initialization. Polished for a seamless user experience.
+// @version      3.1 (The Animator)
+// @description  A smart, adaptive interface with a professionally redesigned and animated launcher button for a seamless native feel.
 // @author       Gemini & Colin J. Brigato
 // @match        https://sora.chatgpt.com/*
 // @grant        GM_addStyle
@@ -30,7 +30,7 @@
     const DEFAULT_SETTINGS = {
         workers: 8,
         fastDownload: false,
-        fastDownloadQuality: 'source' // 'source', 'md', 'ld'
+        fastDownloadQuality: 'source'
     };
     let currentSettings = {};
 
@@ -56,8 +56,6 @@
             userCapabilities = await response.json();
             isAppInitialized = true;
             console.log('Sora Downloader: User capabilities loaded.', userCapabilities);
-            // THE FIX: Always render the app view when initialization is complete.
-            // This will auto-update the panel if it's currently open and showing the spinner.
             renderAppView();
         } catch (error) {
             console.error('Sora Downloader: Failed to initialize app.', error);
@@ -72,7 +70,13 @@
         // --- UI Creation ---
         const launcherButton = document.createElement('div');
         launcherButton.id = 'sora-launcher-button';
-        launcherButton.innerHTML = '&#x1F4E5;';
+        launcherButton.innerHTML = `
+            <div id="sora-launcher-border"></div>
+            <svg id="sora-launcher-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 4V16M12 16L8 12M12 16L16 12" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M4 20H20" stroke="white" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+        `;
         launcherButton.title = 'Open Sora Downloader';
         document.body.appendChild(launcherButton);
 
@@ -84,20 +88,16 @@
                 <h3>Sora Batch Downloader</h3>
                 <div id="sora-close-button" title="Fermer">&times;</div>
             </div>
-
             <div id="sora-no-token-view">
-                <div class="sora-spinner"></div>
-                <p>Awaiting Token...</p>
+                <div class="sora-spinner"></div><p>Awaiting Token...</p>
                 <p class="sora-subtext">Please browse the Sora site (e.g., view or create a video) to activate the downloader.</p>
             </div>
-
             <div id="sora-app-view" style="display: none; flex-direction: column; gap: 15px; width: 100%;">
                 <button id="sora-run-button">Generate Download Script</button>
                 <div id="sora-status">Ready.</div>
                 <textarea id="sora-result-textarea" readonly placeholder="The script to copy/paste..."></textarea>
                 <button id="sora-copy-button" style="display: none;">Copy Script</button>
             </div>
-
             <div id="sora-settings-panel" style="display: none;">
                 <div class="sora-settings-content">
                     <div id="sora-settings-header">
@@ -120,9 +120,7 @@
                     <div id="sora-fast-quality-container" class="sora-setting-row sora-setting-group">
                         <label for="sora-fast-quality-select">Fast Download Quality:</label>
                         <select id="sora-fast-quality-select">
-                            <option value="source">Source (HD)</option>
-                            <option value="md">Medium</option>
-                            <option value="ld">Low</option>
+                            <option value="source">Source (HD)</option><option value="md">Medium</option><option value="ld">Low</option>
                         </select>
                     </div>
                     <div id="sora-parallel-container" class="sora-setting-row sora-setting-group">
@@ -135,7 +133,6 @@
         `;
         document.body.appendChild(mainPanel);
 
-        // --- Get references ---
         const noTokenView = mainPanel.querySelector('#sora-no-token-view');
         const appView = mainPanel.querySelector('#sora-app-view');
         const settingsButton = mainPanel.querySelector('#sora-settings-button');
@@ -156,16 +153,19 @@
 
         // --- Styles ---
         GM_addStyle(`
-            #sora-launcher-button { position: fixed; bottom: 20px; right: 20px; width: 50px; height: 50px; background-color: #3a86ff; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.3); z-index: 9998; transition: transform 0.2s ease, background-image 0.1s linear; }
-            #sora-launcher-button.sora-processing { animation: sora-spin 1.5s linear infinite; }
-            @keyframes sora-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+            #sora-launcher-button { position: fixed; bottom: 20px; right: 20px; width: 50px; height: 50px; background-color: #2d2d2d; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.4); z-index: 9998; transition: all 0.2s ease; }
+            #sora-launcher-button:hover { background-color: #3a3a3a; transform: scale(1.05); }
+            #sora-launcher-border { position: absolute; top: -2px; left: -2px; width: calc(100% + 4px); height: calc(100% + 4px); border-radius: 50%; border: 2px solid #444; transition: border 0.2s ease; }
+            #sora-launcher-button.sora-processing #sora-launcher-border { border-color: #444; border-top-color: #0d6efd; animation: sora-button-spin 1s linear infinite; }
+            #sora-launcher-button svg { z-index: 1; }
+            @keyframes sora-button-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
             #sora-downloader-panel { position: fixed; bottom: 20px; right: 20px; width: 450px; background-color: #1e1e1e; border: 1px solid #444; border-radius: 8px; padding: 20px; z-index: 9999; box-shadow: 0 4px 12px rgba(0,0,0,0.5); color: #e0e0e0; font-family: sans-serif; display: none; flex-direction: column; gap: 15px; align-items: center; }
             #sora-panel-header { display: flex; justify-content: space-between; align-items: center; width: 100%; }
             #sora-panel-header h3 { margin: 0; flex-grow: 1; text-align: center; }
             #sora-close-button, #sora-settings-button { font-size: 24px; color: #888; cursor: pointer; line-height: 1; transition: color 0.2s; background: none; border: none; padding: 0 5px; }
             #sora-close-button:hover, #sora-settings-button:hover { color: white; }
             #sora-no-token-view { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; min-height: 250px; text-align: center; }
-            .sora-spinner { width: 40px; height: 40px; border: 4px solid #444; border-top-color: #3a86ff; border-radius: 50%; animation: sora-spin 1s linear infinite; }
+            .sora-spinner { width: 40px; height: 40px; border: 4px solid #444; border-top-color: #3a86ff; border-radius: 50%; animation: sora-button-spin 1s linear infinite; }
             .sora-subtext { font-size: 12px; color: #888; max-width: 80%; }
             #sora-settings-panel { display: none; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0,0,0,0.7); z-index: 10; backdrop-filter: blur(4px); align-items: center; justify-content: center; }
             .sora-settings-content { background-color: #2a2a2a; padding: 20px; border-radius: 8px; border: 1px solid #555; display: flex; flex-direction: column; gap: 18px; width: 90%; }
@@ -175,54 +175,23 @@
             .sora-setting-row { display: flex; justify-content: space-between; align-items: center; }
             .sora-setting-group { border-top: 1px solid #444; padding-top: 15px; }
             #sora-download-mode-selector { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
-            .sora-disabled-option { color: #777; cursor: not-allowed; }
-            .sora-disabled-option label { cursor: not-allowed !important; }
-            .sora-setting-inactive { opacity: 0.5; pointer-events: none; }
-            .sora-setting-inactive label, .sora-setting-inactive input, .sora-setting-inactive select { cursor: not-allowed !important; }
+            .sora-disabled-option, .sora-setting-inactive { opacity: 0.5; }
+            .sora-disabled-option, .sora-disabled-option label, .sora-setting-inactive, .sora-setting-inactive label, .sora-setting-inactive input, .sora-setting-inactive select { cursor: not-allowed; }
             #sora-downloader-panel button { padding: 10px; border-radius: 5px; border: none; cursor: pointer; background-color: #3a86ff; color: white; font-weight: bold; width: 100%; }
             #sora-downloader-panel button:disabled { background-color: #555; cursor: not-allowed; }
             #sora-status { font-style: italic; color: #aaa; text-align: center; min-height: 20px; }
             #sora-result-textarea { width: 100%; height: 180px; background-color: #111; color: #00ff00; border: 1px solid #444; border-radius: 4px; font-family: 'Courier New', monospace; font-size: 12px; resize: vertical; box-sizing: border-box; }
         `);
 
-        // --- View & State Management ---
-        const renderNoTokenView = () => {
-            if (noTokenView) noTokenView.style.display = 'flex';
-            if (appView) appView.style.display = 'none';
-            if (settingsButton) settingsButton.style.display = 'none';
-        };
-        const renderAppView = () => {
-            if (!isAppInitialized) return; // Prevent rendering before we have capabilities
-            if (noTokenView) noTokenView.style.display = 'none';
-            if (appView) appView.style.display = 'flex';
-            if (settingsButton) settingsButton.style.display = 'initial';
-            if (statusDiv) statusDiv.textContent = 'Ready.'; // FIX 1: Reset status message
-            updateSettingsUI();
-        };
-        const updateSettingsUI = () => {
-            const finalQualityOption = mainPanel.querySelector('#sora-final-quality-option');
-            if (!userCapabilities.can_download_without_watermark) {
-                finalQualityOption.title = "Your plan does not allow downloading without watermark.";
-                modeFinalRadio.disabled = true;
-                finalQualityOption.classList.add('sora-disabled-option');
-                if (!currentSettings.fastDownload) { currentSettings.fastDownload = true; }
-            } else {
-                finalQualityOption.title = "";
-                modeFinalRadio.disabled = false;
-                finalQualityOption.classList.remove('sora-disabled-option');
-            }
-            populateSettingsPanel();
-        };
-
-        // --- Settings Logic ---
+        const renderNoTokenView = () => { if (mainPanel.style.display !== 'none') { noTokenView.style.display = 'flex'; appView.style.display = 'none'; settingsButton.style.display = 'none'; }};
+        const renderAppView = () => { if (!isAppInitialized) return; if (mainPanel.style.display !== 'none') { noTokenView.style.display = 'none'; appView.style.display = 'flex'; settingsButton.style.display = 'initial'; if (statusDiv.textContent.includes('permissions') || statusDiv.textContent.includes('Awaiting')) statusDiv.textContent = 'Ready.'; updateSettingsUI(); }};
+        const updateSettingsUI = () => { const finalQualityOption = mainPanel.querySelector('#sora-final-quality-option'); if (!userCapabilities.can_download_without_watermark) { finalQualityOption.title = "Your plan does not allow downloading without watermark."; modeFinalRadio.disabled = true; finalQualityOption.classList.add('sora-disabled-option'); if (!currentSettings.fastDownload) { currentSettings.fastDownload = true; } } else { finalQualityOption.title = ""; modeFinalRadio.disabled = false; finalQualityOption.classList.remove('sora-disabled-option'); } populateSettingsPanel(); };
         async function loadSettings() { currentSettings = JSON.parse(await GM_getValue('soraDownloaderSettings', JSON.stringify(DEFAULT_SETTINGS))); currentSettings = { ...DEFAULT_SETTINGS, ...currentSettings }; }
         async function saveSettings() { currentSettings.workers = parseInt(parallelInput.value, 10) || DEFAULT_SETTINGS.workers; currentSettings.fastDownload = modeFastRadio.checked; currentSettings.fastDownloadQuality = fastQualitySelect.value; await GM_setValue('soraDownloaderSettings', JSON.stringify(currentSettings)); }
         function populateSettingsPanel() { parallelInput.value = currentSettings.workers; modeFinalRadio.checked = !currentSettings.fastDownload; modeFastRadio.checked = currentSettings.fastDownload; fastQualitySelect.value = currentSettings.fastDownloadQuality; toggleSettingsInteractivity(currentSettings.fastDownload); }
         function toggleSettingsInteractivity(isFastMode) { parallelContainer.classList.toggle('sora-setting-inactive', isFastMode); fastQualityContainer.classList.toggle('sora-setting-inactive', !isFastMode); }
 
         mainPanel.querySelector('#sora-download-mode-selector').addEventListener('change', (e) => { if (e.target.name === 'sora-download-mode') { toggleSettingsInteractivity(e.target.value === 'fast'); } });
-
-        // --- Event Listeners ---
         launcherButton.addEventListener('click', () => { mainPanel.style.display = 'flex'; launcherButton.style.display = 'none'; isAppInitialized ? renderAppView() : renderNoTokenView(); });
         closeButton.addEventListener('click', () => { mainPanel.style.display = 'none'; launcherButton.style.display = 'flex'; });
         settingsButton.addEventListener('click', () => { populateSettingsPanel(); settingsPanel.style.display = 'flex'; });
@@ -230,22 +199,39 @@
         settingsSaveButton.addEventListener('click', async () => { await saveSettings(); settingsPanel.style.display = 'none'; });
         copyButton.addEventListener('click', () => { GM_setClipboard(resultTextarea.value); copyButton.textContent = 'Copied!'; setTimeout(() => { copyButton.textContent = 'Copy Script'; }, 2000); });
 
-        // --- Core Logic ---
         const fetchAndFilterGenerations = async (token, onProgress) => { onProgress('Step 1/3: Fetching & filtering list...', -1); const response = await fetchWithToken(API_LIST_URL, token); if (!response.ok) throw new Error(`API Error (list): ${response.status}`); const data = await response.json(); const validGenerations = []; const skippedTasks = []; data.task_responses.forEach(task => { if (task.status !== 'succeeded') { skippedTasks.push({ id: task.id, reason: task.failure_reason || 'Task failed' }); return; } if (!task.generations || task.generations.length === 0) { if (task.moderation_result?.is_output_rejection) { skippedTasks.push({ id: task.id, reason: 'Content policy rejection' }); } return; } task.generations.forEach(gen => { if (gen.encodings?.source?.path) { validGenerations.push(gen); } else { skippedTasks.push({ id: gen.id, reason: 'Generation failed (missing video file)' }); } }); }); onProgress(`${validGenerations.length} valid generations found.`, -1); statusDiv.textContent = `${validGenerations.length} valid generations found.`; return { validGenerations, skippedTasks }; };
         const fetchRawDownloadUrlsParallel = async (ids, token, concurrency, onProgress) => { const queue = [...ids]; const successes = []; const failures = []; let processedCount = 0; const total = ids.length; const worker = async () => { while (queue.length > 0) { const id = queue.shift(); try { const response = await fetchWithToken(API_RAW_URL_TPL.replace('{id}', id), token); if (response.ok) { const data = await response.json(); if (data.url) { successes.push({ id, url: data.url }); } else { failures.push({ id, reason: 'URL field missing' }); } } else { failures.push({ id, reason: `API Error ${response.status}` }); } } catch (e) { failures.push({ id, reason: `Network Error: ${e.message}` }); } finally { processedCount++; const percent = total > 0 ? (processedCount / total) * 100 : 0; const statusText = `Step 2/3: Fetching URLs (${processedCount}/${total})`; statusDiv.textContent = statusText + '...'; onProgress(statusText, percent); } } }; const workers = Array(concurrency).fill(null).map(() => worker()); await Promise.all(workers); successes.sort((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id)); return { successes, failures }; };
         const generateDownloadScript = (downloadInfo, format, mode, quality, skipped, failures) => { statusDiv.textContent = 'Step 3/3: Generating final script...'; let header = `#!/bin/bash\n# Download script for ${downloadInfo.length} Sora videos\n`; header += `# Mode: ${mode === 'fast' ? `Fast Download (Watermarked, ${quality} quality)` : 'Final Quality (No Watermark)'}\n`; header += `# Format: curl\n\n`; if (skipped.length > 0) { header += `# --- SKIPPED (pre-check) ---\n` + skipped.map(f => `# ${f.id}: ${f.reason}`).join('\n') + `\n\n`; } if (failures.length > 0) { header += `# --- FAILED during URL fetch ---\n` + failures.map(f => `# ${f.id}: ${f.reason}`).join('\n') + `\n\n`; } if (downloadInfo.length === 0) return header + "# No videos to download."; header += `echo "Starting download of ${downloadInfo.length} videos..."\n\n`; const footer = `\n\necho "Download completed!"`; const commands = downloadInfo.map(({ id, url }) => `curl -L -C - -o "sora_${id}.mp4" "${url.replace(/"/g, '\\"')}"`).join('\n'); return header + commands + footer; };
 
         runButton.addEventListener('click', async () => {
-            const updateProgressUI = (statusText, percent) => { launcherButton.title = statusText; if (percent >= 0 && percent <= 100) { launcherButton.style.backgroundImage = `conic-gradient(#0052cc ${percent}%, #3a86ff ${percent}%)`; }};
-            runButton.disabled = true; copyButton.style.display = 'none'; copyButton.textContent = 'Copy Script'; runButton.textContent = 'In progress...'; launcherButton.classList.add('sora-processing');
+            const borderElement = document.getElementById('sora-launcher-border');
+            const updateProgressUI = (statusText, percent) => {
+                launcherButton.title = statusText;
+                if (percent >= 0) {
+                    launcherButton.classList.remove('sora-processing');
+                    borderElement.style.animation = 'sora-button-spin 1.5s linear infinite';
+                    borderElement.style.border = '3px solid transparent';
+                    borderElement.style.backgroundImage = `conic-gradient(#0d6efd ${percent}%, #444 ${percent}%)`;
+                    borderElement.style.backgroundOrigin = 'border-box'; borderElement.style.backgroundClip = 'content-box, border-box';
+                } else {
+                    launcherButton.classList.add('sora-processing');
+                    borderElement.style.backgroundImage = '';
+                    borderElement.style.border = '2px solid #444';
+                    borderElement.style.borderTopColor = '#0d6efd';
+                }
+            };
+
+            runButton.disabled = true; copyButton.style.display = 'none'; copyButton.textContent = 'Copy Script'; runButton.textContent = 'In progress...';
+            updateProgressUI('Initializing...', -1); // Start phase 1 spinner
+
             try {
                 const { validGenerations, skippedTasks } = await fetchAndFilterGenerations(SORA_BEARER_TOKEN, updateProgressUI);
                 let downloadInfo = []; let networkFailures = [];
                 if (validGenerations.length > 0) {
                     if (currentSettings.fastDownload) {
-                        statusDiv.textContent = 'Step 2/3: Extracting URLs directly...'; updateProgressUI('Extracting URLs...', 50);
+                        statusDiv.textContent = 'Step 2/3: Extracting URLs directly...';
+                        updateProgressUI('Extracting URLs...', 100);
                         downloadInfo = validGenerations.map(gen => ({ id: gen.id, url: gen.encodings[currentSettings.fastDownloadQuality]?.path || gen.url })).filter(item => item.url);
-                        updateProgressUI('URLs extracted.', 100);
                     } else {
                         const ids = validGenerations.map(gen => gen.id);
                         const { successes, failures } = await fetchRawDownloadUrlsParallel(ids, SORA_BEARER_TOKEN, currentSettings.workers, updateProgressUI);
@@ -258,16 +244,19 @@
                     statusDiv.textContent = finalStatus;
                     if (downloadInfo.length > 0) copyButton.style.display = 'block';
                 } else {
-                    statusDiv.textContent = 'No valid video generations found.';
-                    resultTextarea.value = `# No valid videos found.\n# Skipped tasks/generations:\n` + skippedTasks.map(f => `# - ${f.id}: ${f.reason}`).join('\n');
+                    statusDiv.textContent = 'No valid video generations found.'; resultTextarea.value = `# No valid videos found.\n# Skipped tasks/generations:\n` + skippedTasks.map(f => `# - ${f.id}: ${f.reason}`).join('\n');
                 }
             } catch (error) {
-                console.error("Error in Sora Downloader script:", error);
-                statusDiv.textContent = `ERROR: ${error.message}`;
-                resultTextarea.value = `An error occurred. Check the console (F12).\n\n${error.stack}`;
+                console.error("Error in Sora Downloader script:", error); statusDiv.textContent = `ERROR: ${error.message}`; resultTextarea.value = `An error occurred. Check the console (F12).\n\n${error.stack}`;
             } finally {
                 runButton.disabled = false; runButton.textContent = 'Generate Download Script';
-                launcherButton.classList.remove('sora-processing'); launcherButton.style.backgroundImage = ''; launcherButton.title = 'Open Sora Downloader';
+                launcherButton.classList.remove('sora-processing');
+                launcherButton.title = 'Open Sora Downloader';
+                if (borderElement) {
+                    borderElement.style.animation = '';
+                    borderElement.style.backgroundImage = '';
+                    borderElement.style.border = '2px solid #444';
+                }
             }
         });
     });
