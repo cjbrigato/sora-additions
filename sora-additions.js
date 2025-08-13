@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Sora - Downloader
 // @namespace    http://tampermonkey.net/
-// @version      2.4 (The Refiner)
-// @description  A smart, adaptive interface for generating batch download scripts, aware of user rights and refined for a better UX.
+// @version      2.5 (The Sentinel)
+// @description  A smart, adaptive interface that auto-updates upon initialization. Polished for a seamless user experience.
 // @author       Gemini & Colin J. Brigato
 // @match        https://sora.chatgpt.com/*
 // @grant        GM_addStyle
@@ -56,10 +56,9 @@
             userCapabilities = await response.json();
             isAppInitialized = true;
             console.log('Sora Downloader: User capabilities loaded.', userCapabilities);
-            const panel = document.getElementById('sora-downloader-panel');
-            if (panel && panel.style.display !== 'none') {
-                renderAppView();
-            }
+            // THE FIX: Always render the app view when initialization is complete.
+            // This will auto-update the panel if it's currently open and showing the spinner.
+            renderAppView();
         } catch (error) {
             console.error('Sora Downloader: Failed to initialize app.', error);
             const statusDiv = document.querySelector('#sora-status');
@@ -68,7 +67,6 @@
     }
 
     window.addEventListener('load', async function() {
-
         await loadSettings();
 
         // --- UI Creation ---
@@ -177,8 +175,10 @@
             .sora-setting-row { display: flex; justify-content: space-between; align-items: center; }
             .sora-setting-group { border-top: 1px solid #444; padding-top: 15px; }
             #sora-download-mode-selector { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
-            .sora-disabled-option, .sora-setting-inactive { opacity: 0.5; pointer-events: none; }
-            .sora-disabled-option label, .sora-setting-inactive label, .sora-setting-inactive input, .sora-setting-inactive select { cursor: not-allowed; }
+            .sora-disabled-option { color: #777; cursor: not-allowed; }
+            .sora-disabled-option label { cursor: not-allowed !important; }
+            .sora-setting-inactive { opacity: 0.5; pointer-events: none; }
+            .sora-setting-inactive label, .sora-setting-inactive input, .sora-setting-inactive select { cursor: not-allowed !important; }
             #sora-downloader-panel button { padding: 10px; border-radius: 5px; border: none; cursor: pointer; background-color: #3a86ff; color: white; font-weight: bold; width: 100%; }
             #sora-downloader-panel button:disabled { background-color: #555; cursor: not-allowed; }
             #sora-status { font-style: italic; color: #aaa; text-align: center; min-height: 20px; }
@@ -186,15 +186,19 @@
         `);
 
         // --- View & State Management ---
-        const renderNoTokenView = () => { noTokenView.style.display = 'flex'; appView.style.display = 'none'; settingsButton.style.display = 'none'; };
+        const renderNoTokenView = () => {
+            if (noTokenView) noTokenView.style.display = 'flex';
+            if (appView) appView.style.display = 'none';
+            if (settingsButton) settingsButton.style.display = 'none';
+        };
         const renderAppView = () => {
-            noTokenView.style.display = 'none';
-            appView.style.display = 'flex';
-            settingsButton.style.display = 'initial';
-            statusDiv.textContent = 'Ready.'; // FIX 1: Reset status message
+            if (!isAppInitialized) return; // Prevent rendering before we have capabilities
+            if (noTokenView) noTokenView.style.display = 'none';
+            if (appView) appView.style.display = 'flex';
+            if (settingsButton) settingsButton.style.display = 'initial';
+            if (statusDiv) statusDiv.textContent = 'Ready.'; // FIX 1: Reset status message
             updateSettingsUI();
         };
-
         const updateSettingsUI = () => {
             const finalQualityOption = mainPanel.querySelector('#sora-final-quality-option');
             if (!userCapabilities.can_download_without_watermark) {
@@ -212,31 +216,11 @@
 
         // --- Settings Logic ---
         async function loadSettings() { currentSettings = JSON.parse(await GM_getValue('soraDownloaderSettings', JSON.stringify(DEFAULT_SETTINGS))); currentSettings = { ...DEFAULT_SETTINGS, ...currentSettings }; }
-        async function saveSettings() {
-            currentSettings.workers = parseInt(parallelInput.value, 10) || DEFAULT_SETTINGS.workers;
-            currentSettings.fastDownload = modeFastRadio.checked;
-            currentSettings.fastDownloadQuality = fastQualitySelect.value;
-            await GM_setValue('soraDownloaderSettings', JSON.stringify(currentSettings));
-        }
+        async function saveSettings() { currentSettings.workers = parseInt(parallelInput.value, 10) || DEFAULT_SETTINGS.workers; currentSettings.fastDownload = modeFastRadio.checked; currentSettings.fastDownloadQuality = fastQualitySelect.value; await GM_setValue('soraDownloaderSettings', JSON.stringify(currentSettings)); }
+        function populateSettingsPanel() { parallelInput.value = currentSettings.workers; modeFinalRadio.checked = !currentSettings.fastDownload; modeFastRadio.checked = currentSettings.fastDownload; fastQualitySelect.value = currentSettings.fastDownloadQuality; toggleSettingsInteractivity(currentSettings.fastDownload); }
+        function toggleSettingsInteractivity(isFastMode) { parallelContainer.classList.toggle('sora-setting-inactive', isFastMode); fastQualityContainer.classList.toggle('sora-setting-inactive', !isFastMode); }
 
-        function populateSettingsPanel() {
-            parallelInput.value = currentSettings.workers;
-            modeFinalRadio.checked = !currentSettings.fastDownload;
-            modeFastRadio.checked = currentSettings.fastDownload;
-            fastQualitySelect.value = currentSettings.fastDownloadQuality;
-            toggleSettingsInteractivity(currentSettings.fastDownload); // FIX 3: Visually disable settings
-        }
-
-        function toggleSettingsInteractivity(isFastMode) { // FIX 3: New function
-            parallelContainer.classList.toggle('sora-setting-inactive', isFastMode);
-            fastQualityContainer.classList.toggle('sora-setting-inactive', !isFastMode);
-        }
-
-        mainPanel.querySelector('#sora-download-mode-selector').addEventListener('change', (e) => {
-             if (e.target.name === 'sora-download-mode') {
-                toggleSettingsInteractivity(e.target.value === 'fast');
-            }
-        });
+        mainPanel.querySelector('#sora-download-mode-selector').addEventListener('change', (e) => { if (e.target.name === 'sora-download-mode') { toggleSettingsInteractivity(e.target.value === 'fast'); } });
 
         // --- Event Listeners ---
         launcherButton.addEventListener('click', () => { mainPanel.style.display = 'flex'; launcherButton.style.display = 'none'; isAppInitialized ? renderAppView() : renderNoTokenView(); });
@@ -246,40 +230,30 @@
         settingsSaveButton.addEventListener('click', async () => { await saveSettings(); settingsPanel.style.display = 'none'; });
         copyButton.addEventListener('click', () => { GM_setClipboard(resultTextarea.value); copyButton.textContent = 'Copied!'; setTimeout(() => { copyButton.textContent = 'Copy Script'; }, 2000); });
 
-          // --- Helper Functions (pasted for completeness) ---
+        // --- Core Logic ---
         const fetchAndFilterGenerations = async (token, onProgress) => { onProgress('Step 1/3: Fetching & filtering list...', -1); const response = await fetchWithToken(API_LIST_URL, token); if (!response.ok) throw new Error(`API Error (list): ${response.status}`); const data = await response.json(); const validGenerations = []; const skippedTasks = []; data.task_responses.forEach(task => { if (task.status !== 'succeeded') { skippedTasks.push({ id: task.id, reason: task.failure_reason || 'Task failed' }); return; } if (!task.generations || task.generations.length === 0) { if (task.moderation_result?.is_output_rejection) { skippedTasks.push({ id: task.id, reason: 'Content policy rejection' }); } return; } task.generations.forEach(gen => { if (gen.encodings?.source?.path) { validGenerations.push(gen); } else { skippedTasks.push({ id: gen.id, reason: 'Generation failed (missing video file)' }); } }); }); onProgress(`${validGenerations.length} valid generations found.`, -1); statusDiv.textContent = `${validGenerations.length} valid generations found.`; return { validGenerations, skippedTasks }; };
         const fetchRawDownloadUrlsParallel = async (ids, token, concurrency, onProgress) => { const queue = [...ids]; const successes = []; const failures = []; let processedCount = 0; const total = ids.length; const worker = async () => { while (queue.length > 0) { const id = queue.shift(); try { const response = await fetchWithToken(API_RAW_URL_TPL.replace('{id}', id), token); if (response.ok) { const data = await response.json(); if (data.url) { successes.push({ id, url: data.url }); } else { failures.push({ id, reason: 'URL field missing' }); } } else { failures.push({ id, reason: `API Error ${response.status}` }); } } catch (e) { failures.push({ id, reason: `Network Error: ${e.message}` }); } finally { processedCount++; const percent = total > 0 ? (processedCount / total) * 100 : 0; const statusText = `Step 2/3: Fetching URLs (${processedCount}/${total})`; statusDiv.textContent = statusText + '...'; onProgress(statusText, percent); } } }; const workers = Array(concurrency).fill(null).map(() => worker()); await Promise.all(workers); successes.sort((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id)); return { successes, failures }; };
         const generateDownloadScript = (downloadInfo, format, mode, quality, skipped, failures) => { statusDiv.textContent = 'Step 3/3: Generating final script...'; let header = `#!/bin/bash\n# Download script for ${downloadInfo.length} Sora videos\n`; header += `# Mode: ${mode === 'fast' ? `Fast Download (Watermarked, ${quality} quality)` : 'Final Quality (No Watermark)'}\n`; header += `# Format: curl\n\n`; if (skipped.length > 0) { header += `# --- SKIPPED (pre-check) ---\n` + skipped.map(f => `# ${f.id}: ${f.reason}`).join('\n') + `\n\n`; } if (failures.length > 0) { header += `# --- FAILED during URL fetch ---\n` + failures.map(f => `# ${f.id}: ${f.reason}`).join('\n') + `\n\n`; } if (downloadInfo.length === 0) return header + "# No videos to download."; header += `echo "Starting download of ${downloadInfo.length} videos..."\n\n`; const footer = `\n\necho "Download completed!"`; const commands = downloadInfo.map(({ id, url }) => `curl -L -C - -o "sora_${id}.mp4" "${url.replace(/"/g, '\\"')}"`).join('\n'); return header + commands + footer; };
 
         runButton.addEventListener('click', async () => {
             const updateProgressUI = (statusText, percent) => { launcherButton.title = statusText; if (percent >= 0 && percent <= 100) { launcherButton.style.backgroundImage = `conic-gradient(#0052cc ${percent}%, #3a86ff ${percent}%)`; }};
-
             runButton.disabled = true; copyButton.style.display = 'none'; copyButton.textContent = 'Copy Script'; runButton.textContent = 'In progress...'; launcherButton.classList.add('sora-processing');
-
             try {
                 const { validGenerations, skippedTasks } = await fetchAndFilterGenerations(SORA_BEARER_TOKEN, updateProgressUI);
                 let downloadInfo = []; let networkFailures = [];
-
                 if (validGenerations.length > 0) {
                     if (currentSettings.fastDownload) {
-                        statusDiv.textContent = 'Step 2/3: Extracting URLs directly...';
-                        updateProgressUI('Extracting URLs...', 50);
-                        downloadInfo = validGenerations.map(gen => ({
-                            id: gen.id,
-                            url: gen.encodings[currentSettings.fastDownloadQuality]?.path || gen.url
-                        })).filter(item => item.url); // Ensure URL exists
+                        statusDiv.textContent = 'Step 2/3: Extracting URLs directly...'; updateProgressUI('Extracting URLs...', 50);
+                        downloadInfo = validGenerations.map(gen => ({ id: gen.id, url: gen.encodings[currentSettings.fastDownloadQuality]?.path || gen.url })).filter(item => item.url);
                         updateProgressUI('URLs extracted.', 100);
                     } else {
                         const ids = validGenerations.map(gen => gen.id);
                         const { successes, failures } = await fetchRawDownloadUrlsParallel(ids, SORA_BEARER_TOKEN, currentSettings.workers, updateProgressUI);
-                        downloadInfo = successes;
-                        networkFailures = failures;
+                        downloadInfo = successes; networkFailures = failures;
                     }
-
                     const scriptContent = generateDownloadScript(downloadInfo, 'curl', currentSettings.fastDownload ? 'fast' : 'final', currentSettings.fastDownloadQuality, skippedTasks, networkFailures);
                     resultTextarea.value = scriptContent;
-                    let finalStatus = `Done! Script for ${downloadInfo.length} videos.`;
-                    const totalSkipped = skippedTasks.length + networkFailures.length;
+                    let finalStatus = `Done! Script for ${downloadInfo.length} videos.`; const totalSkipped = skippedTasks.length + networkFailures.length;
                     if (totalSkipped > 0) finalStatus += ` (${totalSkipped} skipped).`;
                     statusDiv.textContent = finalStatus;
                     if (downloadInfo.length > 0) copyButton.style.display = 'block';
@@ -296,7 +270,5 @@
                 launcherButton.classList.remove('sora-processing'); launcherButton.style.backgroundImage = ''; launcherButton.title = 'Open Sora Downloader';
             }
         });
-
-
     });
 })();
