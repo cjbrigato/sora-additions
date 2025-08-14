@@ -94,6 +94,10 @@ echo "Download completed!"
 * **Hit the 100 limit**
   By design: list fetch is capped at **100**. Use the **Max tasks** setting to slice your batches.
 
+## Development
+
+Source is written in TypeScript. Run `npm install` then `npm run build` to regenerate compiled scripts.
+
 ## Limitations
 
 * **Capped list**: Sora fetch is limited to 100; the tool is built for **frequent, small-to-medium** batches, not “export everything”.
