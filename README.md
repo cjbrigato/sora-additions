@@ -64,4 +64,4 @@ echo "Download completed!"
 This project is licensed under the MIT License - see the LICENSE file for details.
 
 ## Notes of conception:
-See [this file](.gemini.md) for more information
+See [this file](.llm.md) for more information
