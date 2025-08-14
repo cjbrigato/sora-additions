@@ -43,10 +43,22 @@ Chrome extension that plugs **directly** into Sora’s UI to help you retrieve y
 
 ## Install
 
+The project now uses [Vite](https://vite.dev/) with React and TypeScript.
+
+### Development
+
 1. **Clone** (or download) this repo locally.
-2. Open `chrome://extensions` → toggle **Developer mode**.
-3. Click **Load unpacked** → select the project folder.
-4. Go to `https://sora.chatgpt.com/` — a round launcher appears bottom-right.
+2. Run `npm install` to install dependencies.
+3. Run `npm run dev` to build the extension in watch mode.  The output appears in `dist/`.
+4. In Chrome open `chrome://extensions`, enable **Developer mode** and choose **Load unpacked**.
+5. Select the `dist` folder.  Any code changes will trigger an automatic rebuild; refresh the extension in Chrome to reload.
+
+### Production build
+
+1. Run `npm run build` to produce an optimized build in `dist/`.
+2. Load the `dist` directory as an unpacked extension as above.
+
+Once loaded, visit `https://sora.chatgpt.com/` — a round launcher appears bottom-right.
 
 > The extension works entirely client-side.
 > The bearer token is captured in-page and stored in **`chrome.storage.session`** (memory only), not persisted to disk, and never sent to external servers.

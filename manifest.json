@@ -1,28 +1,27 @@
 {
-    "manifest_version": 3,
-    "name": "Sora Batch Downloader (Generator)",
-    "version": "0.5.2",
-    "description": "Generate scripts or do direct/zip downloads of your Sora videos (self-service).",
-    "icons": { "128": "icons/icon128.png" },
-  
-    "permissions": ["storage", "scripting", "downloads"],
-    "host_permissions": ["https://sora.chatgpt.com/*"],
-  
-    "background": { "service_worker": "background.js" },
-  
-    "content_scripts": [
-      {
-        "matches": ["https://sora.chatgpt.com/*"],
-        "js": ["content.js"],
-        "run_at": "document_start"
-      }
-    ],
-  
-    "web_accessible_resources": [
-      {
-        "resources": ["pageHook.js"],
-        "matches": ["https://sora.chatgpt.com/*"]
-      }
-    ]
-  }
-  
+  "manifest_version": 3,
+  "name": "Sora Batch Downloader (Generator)",
+  "version": "0.5.2",
+  "description": "Generate scripts or do direct/zip downloads of your Sora videos (self-service).",
+  "icons": { "128": "icons/icon128.png" },
+
+  "permissions": ["storage", "scripting", "downloads"],
+  "host_permissions": ["https://sora.chatgpt.com/*"],
+
+  "background": { "service_worker": "src/background.ts" },
+
+  "content_scripts": [
+    {
+      "matches": ["https://sora.chatgpt.com/*"],
+      "js": ["src/content/main.tsx"],
+      "run_at": "document_start"
+    }
+  ],
+
+  "web_accessible_resources": [
+    {
+      "resources": ["src/pageHook.ts"],
+      "matches": ["https://sora.chatgpt.com/*"]
+    }
+  ]
+}
