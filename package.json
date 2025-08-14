@@ -1,0 +1,27 @@
+{
+  "name": "sora-additions",
+  "version": "1.0.0",
+  "description": "Chrome extension that plugs **directly** into Sora’s UI to help you retrieve your own generations — fast, reliably, and without fighting the site every time.",
+  "main": "dist/background.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "type": "module",
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@crxjs/vite-plugin": "^2.0.0",
+    "@types/chrome": "^0.0.246",
+    "@types/react": "^18.2.21",
+    "@types/react-dom": "^18.2.7",
+    "@vitejs/plugin-react": "^5.0.0",
+    "typescript": "^5.2.2",
+    "vite": "^5.0.0"
+  }
+}
