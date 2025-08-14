@@ -1,27 +1,67 @@
 # Sora Batch Downloader
 
-This Tampermonkey userscript integrates directly into the Sora web interface, providing an intuitive UI for generating batch download scripts for your videos. 
-To circumvent the overall pain that feels any heavy sora user regarding downloading their work
+Chrome extension that plugs **directly** into Sora’s UI to help you retrieve your own generations — fast, reliably, and without fighting the site every time.
 
 ## In Action
+
 <img width="657" height="637" alt="image" src="https://github.com/user-attachments/assets/30ba8653-1301-4de7-bb88-78e6ad0bf01d" />
 <img width="572" height="514" alt="image" src="https://github.com/user-attachments/assets/39efb106-6ef7-46c8-97c2-846aae5bb028" />
 
-
 ## Features
 
--   **Two Download Modes:**
-    -   **Final Quality:** Fetches the pristine, watermark-free version of your videos (if your plan allows it). This is the recommended mode for archival and production use.
-    -   **Fast Preview:** Instantly generates a script using the watermarked preview versions, perfect for quickly getting review copies.
--   **Smart when possible:**
-    -   **Permission-Aware:** Automatically queries your user permissions upon loading. The "Final Quality" option is disabled if your account does not have rights to download without a watermark.
-    -   **Filtering:** Proactively filters out generations that failed due to content policy, processing errors, or other issues, preventing unnecessary requests and errors.
-    -   **Dynamic Feedback:** real time indicating both activity and progress.
-    -   **Detailed Output:** The generated `bash` script is commented with a summary of the operation, including a list of any videos that were skipped and why.
+* **Two retrieval modes**
+
+  * **ZIP mode (default, batches):** downloads files **locally**, then streams a **single ZIP (STORE)** and triggers **one** browser download. Respects Chrome’s *Always ask where to save*; appears once in the Downloads list.
+  * **Direct mode (small batches):** uses `chrome.downloads` with a **queue** (parallelism configurable), optional per-file **Save As**.
+* **Smart & safe**
+
+  * **Task-gating:** Direct/ZIP operates on up to **N tasks** (cap configurable), with the website list also capped at **100** by design. Each task can yield **up to 4 videos**.
+  * **Permission-aware:** if your plan doesn’t allow watermark-free download, **Final** is disabled; you can still use **Fast Preview**.
+  * **Filtering:** skips failed/moderated generations; shows reasons in the output.
+* **UX**
+
+  * **Shadow DOM UI**: clean launcher (bottom-right), panel with settings.
+  * **HUD** during operations: ring + two lines in the panel, and a **mini badge** on the launcher when the panel is closed (DL x/y → ZIP x/y).
+  * **Stop** button cancels downloads and ZIP cleanly.
+* **Script fallback**
+
+  * Always generates a robust `curl` script with comments (skipped/failed), so you can mirror the operation from a terminal if needed.
+
+## Modes & Options (quick overview)
+
+* **Download Mode**
+
+  * **Final Quality** (no watermark) — if allowed by your plan.
+  * **Fast Preview** (watermarked source/MD/LD).
+* **Direct Download (small batches)**
+
+  * **Enable**, **Max tasks**, **Parallel** (1–6), **Save As** (per file).
+* **ZIP mode (batches)**
+
+  * Enabled by default. Flow: **DL → OPFS → ZIP → single browser download**.
+    *No picker mid-process; picker only appears if your Chrome setting asks at download time.*
+
+## Install
+
+1. **Clone** (or download) this repo locally.
+2. Open `chrome://extensions` → toggle **Developer mode**.
+3. Click **Load unpacked** → select the project folder.
+4. Go to `https://sora.chatgpt.com/` — a round launcher appears bottom-right.
+
+> The extension works entirely client-side.
+> The bearer token is captured in-page and stored in **`chrome.storage.session`** (memory only), not persisted to disk, and never sent to external servers.
+
+## Use
+
+1. Open Sora and interact normally; the panel may show **“Awaiting Token…”** until you view/create a video.
+2. Click the launcher → **Settings** (⚙️) to choose mode & options.
+3. Click **Zip & Download** (ZIP mode) or **Direct Download** (small batches), or **Generate Download Script** (fallback).
+4. Watch the HUD (panel) and the mini badge (closed panel) for **DL x/y** then **ZIP x/y**.
+5. When ZIP finishes, the extension triggers **one browser download** of the `.zip`.
 
 ## Example Script Output
 
-The script provides clear feedback directly in the generated file, so you always know which videos were skipped and why, without having to check the console.
+The generated script includes comments about skipped/failed items and uses resilient flags.
 
 ```bash
 #!/bin/bash
@@ -30,7 +70,6 @@ The script provides clear feedback directly in the generated file, so you always
 # Format: curl
 
 # --- SKIPPED (pre-check) ---
-# task_01k2aymxfse43tpebvc1k5fqm1: input_moderation
 # task_01k2crmva3e3kbvz6x3anystky: processing_error
 # gen_01k2ghtdd4etn8266an4fc1rrv: Generation failed (missing video file)
 
@@ -39,30 +78,32 @@ The script provides clear feedback directly in the generated file, so you always
 
 echo "Starting download of 168 videos..."
 
-curl -L -C - -o "sora_gen_01k2gej4bzecaa30yqknj688kd.mp4" "https://..."
-curl -L -C - -o "sora_gen_01k2gah46mf1ja0mg3hpbeev2m.mp4" "https://..."
-# ...and 166 more video downloads...
-
+curl -L -C - --fail --retry 5 --retry-delay 2 -o "sora_gen_01k2gej4bzecaa30yqknj688kd.mp4" "https://..."
+# …
 echo "Download completed!"
 ```
 
-## How to Use
+## Troubleshooting
 
-1.  **Install a Userscript Manager:** You need a browser extension like [Tampermonkey](https://www.tampermonkey.net/) (recommended) or Greasemonkey.
-2.  **Install the Script:** Create a new script in Tampermonkey and paste the entire `.js` file content.
-3.  **Browse Sora:** Navigate to `https://sora.chatgpt.com/`. You will see a new circular icon appear in the bottom-right corner.
-4.  **Activate the Downloader:** At first, the panel will show "Awaiting Token...". Simply use the Sora site normally (e.g., click on a video or create a new one). The script will automatically capture the necessary credentials and unlock the interface.
-5.  **Generate Script:** Click the launcher icon to open the panel. Click the settings cog (⚙️) to configure your download mode and other options, then click "Generate Download Script".
-6.  **Run in Terminal:** Copy the generated script from the text area, save it to a file (e.g., `sora_downloads.sh`), make it executable (`chmod +x sora_downloads.sh`), and run it in your terminal (`./sora_downloads.sh`).
+* **Stuck on “Awaiting Token…”**
+  View or create a video to trigger authenticated requests. If idle for long, reload Sora (the token is re-captured automatically).
+* **Nothing downloads in ZIP mode**
+  Ensure Chrome’s Downloads are allowed. ZIP appears **once** at the end. If you use *Always ask where to save*, the Save dialog appears **only at the end**.
+* **Stop button doesn’t clear UI**
+  It should; if you killed the tab during DL/ZIP, just reopen the panel — the HUD resets automatically.
+* **Hit the 100 limit**
+  By design: list fetch is capped at **100**. Use the **Max tasks** setting to slice your batches.
 
 ## Limitations
 
--   **This is a script generator, not a direct in-browser downloader.** It produces a `bash` script that you must run from a command-line terminal (`curl` is required). This method is far more reliable for downloading a large number of large files.
--   The script depends on the current structure of the Sora website and its internal APIs. Future updates by OpenAI may require adjustments to this script to maintain functionality.
+* **Capped list**: Sora fetch is limited to 100; the tool is built for **frequent, small-to-medium** batches, not “export everything”.
+* **ZIP format**: current ZIP is classic PKZIP (no ZIP64). If single files or offsets exceed 4 GB, we’ll upgrade to ZIP64.
+* Subject to Sora UI/API changes.
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+MIT — see `LICENSE`.
 
-## Notes of conception:
-See [this file](.llm.md) for more information
+## Notes of conception
+
+See **[.llm](.llm)** for provenance, model contributions, and changelog.
