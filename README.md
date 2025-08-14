@@ -44,12 +44,19 @@ Chrome extension that plugs **directly** into Sora’s UI to help you retrieve y
 ## Install
 
 1. **Clone** (or download) this repo locally.
-2. Open `chrome://extensions` → toggle **Developer mode**.
-3. Click **Load unpacked** → select the project folder.
-4. Go to `https://sora.chatgpt.com/` — a round launcher appears bottom-right.
+2. **Install dependencies:** `npm install`
+3. **Build:** `npm run build` (outputs to `dist/`)
+4. Open `chrome://extensions` → toggle **Developer mode**.
+5. Click **Load unpacked** → select the `dist` folder.
+6. Go to `https://sora.chatgpt.com/` — a round launcher appears bottom-right.
 
 > The extension works entirely client-side.
 > The bearer token is captured in-page and stored in **`chrome.storage.session`** (memory only), not persisted to disk, and never sent to external servers.
+## Development
+
+- `npm run dev` – rebuilds the extension into `dist/` on file changes.
+- `npm run type-check` – run TypeScript type checks.
+- After rebuilding, reload the extension from `chrome://extensions`.
 
 ## Use
 

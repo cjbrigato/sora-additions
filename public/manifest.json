@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "Sora Batch Downloader (Generator)",
-    "version": "0.5.2",
+    "version": "0.5.3",
     "description": "Generate scripts or do direct/zip downloads of your Sora videos (self-service).",
     "icons": { "128": "icons/icon128.png" },
   
