@@ -4,7 +4,7 @@ This Tampermonkey userscript integrates directly into the Sora web interface, pr
 To circumvent the overall pain that feels any heavy sora user regarding downloading their work
 
 ## In Action
-
+<img width="657" height="637" alt="image" src="https://github.com/user-attachments/assets/30ba8653-1301-4de7-bb88-78e6ad0bf01d" />
 
 
 ## Features
