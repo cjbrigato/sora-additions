@@ -12,7 +12,7 @@ const API = {
   let bearer = null;
   
   // Minimal in-memory state for direct download batches
-  let currentBatch = null; // { tabId, queue:[{url,filename}], active, max, done, total, map:dlId->idx }
+  let currentBatch = null; // { tabId, queue:[{url,filename}], active, max, done, total, idMap:Map, saveAs:boolean, cancelling:boolean }
   
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     (async () => {
@@ -34,9 +34,14 @@ const API = {
             return;
   
           case 'START_DIRECT_DOWNLOAD':
-            // items: [{url, filename}], parallel: number
-            startDirect(sender?.tab?.id, msg.items || [], Math.max(1, msg.parallel | 0) || DIRECT.DEFAULT_PARALLEL);
+            // items: [{url, filename}], parallel: number, saveAs: boolean
+            startDirect(sender?.tab?.id, msg.items || [], Math.max(1, msg.parallel | 0) || DIRECT.DEFAULT_PARALLEL, !!msg.saveAs);
             sendResponse({ ok: true, total: (msg.items || []).length });
+            return;
+  
+          case 'CANCEL_DIRECT_DOWNLOAD':
+            cancelDirect();
+            sendResponse({ ok: true });
             return;
   
           default:
@@ -46,7 +51,7 @@ const API = {
         sendResponse({ ok: false, error: String(e?.message || e) });
       }
     })();
-    return true;
+    return true; // async response
   });
   
   function ensureToken() { if (!bearer) throw new Error('No token captured yet'); }
@@ -73,7 +78,7 @@ const API = {
   }
   
   // ---------------- Direct download queue ----------------
-  function startDirect(tabId, items, parallel) {
+  function startDirect(tabId, items, parallel, saveAs) {
     if (!tabId || !items.length) return;
   
     currentBatch = {
@@ -83,20 +88,34 @@ const API = {
       max: parallel,
       done: 0,
       total: items.length,
-      idMap: new Map() // downloadId -> item index
+      idMap: new Map(), // downloadId -> filename
+      saveAs: !!saveAs,
+      cancelling: false
     };
   
-    // First progress push
     pushProgress({ phase: 'start', done: 0, total: currentBatch.total });
   
     while (currentBatch.active < currentBatch.max) dequeueNext();
+  }
+  
+  function cancelDirect() {
+    if (!currentBatch) return;
+    currentBatch.cancelling = true;
+    currentBatch.queue.length = 0; // clear the queue
+    pushProgress({ phase: 'cancel_start' });
+  
+    // cancel all active downloads
+    for (const dlId of Array.from(currentBatch.idMap.keys())) {
+      try { chrome.downloads.cancel(dlId); } catch {}
+    }
+    // completion will be reported via onChanged -> interrupted, then we finalize when active hits 0
   }
   
   function dequeueNext() {
     if (!currentBatch) return;
     if (!currentBatch.queue.length) {
       if (currentBatch.active === 0) {
-        pushProgress({ phase: 'done', done: currentBatch.done, total: currentBatch.total });
+        pushProgress({ phase: currentBatch.cancelling ? 'cancel_done' : 'done', done: currentBatch.done, total: currentBatch.total });
         currentBatch = null;
       }
       return;
@@ -105,7 +124,7 @@ const API = {
     currentBatch.active += 1;
   
     chrome.downloads.download(
-      { url: item.url, filename: item.filename, conflictAction: 'uniquify' },
+      { url: item.url, filename: item.filename, conflictAction: 'uniquify', saveAs: currentBatch.saveAs },
       (dlId) => {
         if (!dlId) {
           // immediate failure

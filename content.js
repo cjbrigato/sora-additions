@@ -1,16 +1,17 @@
-// content.js — v0.4.3
-// Shadow DOM UI, compact textarea + width fix, direct-by-tasks, disabled list-limit when direct on,
-// run button label toggles to "Direct Download" when direct is enabled.
+// content.js — v0.4.5
+// Mixed layout: classic settings in compact horizontal rows; Direct section one-per-line.
+// Shadow DOM, width-safe textarea, direct-by-tasks, Save As, Stop Direct, button label toggle.
 (() => {
     'use strict';
   
     // ---------- Messaging (content <-> background) ----------
     const API = {
-      list:        (limit)           => ({ type: 'FETCH_LIST', limit }),
-      params:      ()                => ({ type: 'FETCH_PARAMS' }),
-      setToken:    (token)           => ({ type: 'SET_TOKEN', token }),
-      rawOne:      (id)              => ({ type: 'FETCH_RAW_ONE', id }),
-      startDirect: (items, parallel) => ({ type: 'START_DIRECT_DOWNLOAD', items, parallel })
+      list:        (limit)                    => ({ type: 'FETCH_LIST', limit }),
+      params:      ()                         => ({ type: 'FETCH_PARAMS' }),
+      setToken:    (token)                    => ({ type: 'SET_TOKEN', token }),
+      rawOne:      (id)                       => ({ type: 'FETCH_RAW_ONE', id }),
+      startDirect: (items, parallel, saveAs)  => ({ type: 'START_DIRECT_DOWNLOAD', items, parallel, saveAs }),
+      cancelDirect:()                         => ({ type: 'CANCEL_DIRECT_DOWNLOAD' })
     };
   
     // ---------- Settings ----------
@@ -25,12 +26,14 @@
       // Direct mode (small batches) — by TASKS
       directDownload: false,
       directMaxTasks: 20, // X tasks => up to ~4*X downloads
-      directParallel: 3   // concurrent chrome downloads (1..6 advised)
+      directParallel: 3,   // concurrent chrome downloads (1..6 advised)
+      directSaveAs: false  // prompt Save As for each file
     };
   
     let currentSettings = { ...DEFAULT_SETTINGS };
     let userCapabilities = { can_download_without_watermark: false };
     let isAppInitialized = false;
+    let directRunning = false;
   
     const ui = {};
   
@@ -65,12 +68,12 @@
         chrome.storage.sync.get('soraDownloaderSettings', (data) => {
           try {
             const saved = data?.soraDownloaderSettings ? JSON.parse(data.soraDownloaderSettings) : {};
-            // migration old key
-            if (saved.directMaxItems && !saved.directMaxTasks) saved.directMaxTasks = saved.directMaxItems;
+            if (saved.directMaxItems && !saved.directMaxTasks) saved.directMaxTasks = saved.directMaxItems; // migrate
             currentSettings = { ...DEFAULT_SETTINGS, ...saved };
-            currentSettings.limit = clampInt(currentSettings.limit, 1, DEFAULT_LIMIT, DEFAULT_SETTINGS.limit);
+            currentSettings.limit          = clampInt(currentSettings.limit, 1, DEFAULT_LIMIT, DEFAULT_SETTINGS.limit);
             currentSettings.directMaxTasks = clampInt(currentSettings.directMaxTasks, 1, 100, DEFAULT_SETTINGS.directMaxTasks);
             currentSettings.directParallel = clampInt(currentSettings.directParallel, 1, 6, DEFAULT_SETTINGS.directParallel);
+            currentSettings.directSaveAs   = !!currentSettings.directSaveAs;
           } catch { currentSettings = { ...DEFAULT_SETTINGS }; }
           resolve();
         });
@@ -85,7 +88,7 @@
       const n = parseInt(v, 10);
       if (Number.isFinite(n)) return Math.min(Math.max(n, min), max);
       return fallback;
-      }
+    }
   
     // ---------- UI (Shadow DOM) ----------
     window.addEventListener('load', async () => {
@@ -101,9 +104,7 @@
   
       root.innerHTML = `
         <style>
-          /* Ensure widths include padding/border and flex/grid items can shrink */
           :host, *, *::before, *::after { box-sizing: border-box; }
-  
           @keyframes sora-button-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
   
           #sora-launcher-button{
@@ -114,13 +115,12 @@
           #sora-launcher-button:hover{ background:#151515; }
           #sora-launcher-border{ position:absolute; inset:2px; border-radius:50%; }
   
-          /* Panel bottom-right */
           #sora-downloader-panel{
             position: fixed; right: 18px; bottom: 18px; width: 560px; max-height: 74vh;
             display:none; flex-direction:column; gap:12px; background:#1e1e1e; color:#eee;
             border:1px solid #444; border-radius:12px; padding:12px; z-index: 2147483647; overflow: hidden;
             font: 13px/1.45 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
-            min-width: 0; /* prevent children from forcing overflow */
+            min-width: 0;
           }
           #sora-panel-header{
             display:flex; align-items:center; justify-content:space-between; gap:8px; border-bottom:1px solid #333; padding-bottom:6px;
@@ -142,20 +142,14 @@
           .sora-subtext{ font-size:12px; color:#aaa; max-width: 86%; text-align:center; }
   
           #sora-app-view{
-            display:flex; flex-direction:column; gap:10px; width:100%;
-            min-width: 0; /* lets textarea shrink */
+            display:flex; flex-direction:column; gap:10px; width:100%; min-width:0;
           }
           #sora-status{ font-size:13px; color:#bbb; }
   
-          /* Textarea compact + bulletproof width */
+          /* Textarea width-safe */
           #sora-result-textarea{
-            display:block;
-            width:100%;
-            max-width:100%;
-            box-sizing:border-box;
-  
-            height: 200px;
-            max-height: calc(70vh - 260px);
+            display:block; width:100%; max-width:100%;
+            height: 200px; max-height: calc(70vh - 260px);
             background:#0b0b0b; color:#b8ffb8;
             font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
             border:1px solid #333; border-radius:10px; padding:10px; white-space:pre;
@@ -166,44 +160,44 @@
           #sora-result-textarea::-webkit-scrollbar-thumb{ background:#3a3a3a; border-radius:8px; border:2px solid #0b0b0b; }
           #sora-result-textarea::-webkit-scrollbar-thumb:hover{ background:#4a4a4a; }
   
-          .sora-row{ display:flex; gap:8px; align-items:center; }
+          .sora-row{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
           .sora-btn{ background:#0d6efd; color:#fff; border:none; padding:8px 12px; border-radius:8px; cursor:pointer; }
           .sora-btn.secondary{ background:#2c2c2c; color:#ddd; border:1px solid #444; }
+          .sora-btn.danger{ background:#a33; }
           .sora-btn:disabled{ opacity:0.6; cursor:not-allowed; }
   
-          /* Settings overlay (no horizontal scrollbar) */
+          /* Settings overlay */
           #sora-settings-panel{
             position: absolute; inset: 12px; background: #1a1a1a; border:1px solid #333; border-radius:10px; padding:10px; display:none;
-            overflow-y:auto; overflow-x:hidden;  /* <- kill horizontal bar */
-            -webkit-overflow-scrolling: touch;
-            min-width: 0;
+            overflow-y:auto; overflow-x:hidden;
+            -webkit-overflow-scrolling: touch; min-width:0;
           }
-          .sora-settings-content{ display:flex; flex-direction:column; gap:14px; max-width:100%; min-width:0; }
+          /* Vertical scrollbar skin */
+          #sora-settings-panel::-webkit-scrollbar{ width:12px; height:12px; }
+          #sora-settings-panel::-webkit-scrollbar-track{ background:#181818; border-radius:10px; }
+          #sora-settings-panel::-webkit-scrollbar-thumb{ background:#3a3a3a; border-radius:10px; border:2px solid #1a1a1a; }
+          #sora-settings-panel::-webkit-scrollbar-thumb:hover{ background:#4a4a4a; }
+  
+          .sora-settings-content{ display:flex; flex-direction:column; gap:12px; max-width:100%; min-width:0; }
           #sora-settings-header{ display:flex; align-items:center; justify-content:space-between; }
-          #sora-settings-close-button{ cursor:pointer; font-size:20px; padding:2px 8px; }
   
-          .sora-setting-row{ display:flex; justify-content:space-between; gap:8px; align-items:center; min-width:0; }
-          .sora-setting-row > label { color:#ccc; }
-          .sora-setting-group{ border-top:1px solid #333; padding-top:10px; }
+          /* COMPACT rows (classic settings) */
+          .sora-row-compact{
+            display:flex; align-items:center; justify-content:space-between; gap:12px;
+          }
+          .sora-row-compact > label{ color:#ccc; }
+  
+          /* BLOCK rows (Direct-only) */
+          .sora-row-block{
+            display:flex; flex-direction:column; align-items:flex-start; gap:8px; padding-top:4px;
+          }
+          .sora-setting-group{ border-top:1px solid #333; padding-top:10px; margin-top:6px; }
           .sora-setting-inactive{ opacity:0.5; pointer-events:none; }
-  
-          .sora-disabled-option, .sora-disabled-option *{ cursor:not-allowed; opacity:0.6; }
+          .sora-subnote{ font-size:12px; color:#9aa; margin-top:2px; }
   
           input[type="number"], select{
             background:#111; color:#eee; border:1px solid #444; border-radius:6px; padding:6px; min-width: 120px;
           }
-  
-          /* Direct controls aligned in a shrinking grid */
-          .sora-inline{
-            display:grid;
-            grid-template-columns: minmax(0, max-content) minmax(0, max-content) minmax(0, max-content);
-            gap:12px; align-items:center; justify-content:start;
-            min-width:0;
-          }
-          .sora-inline .kv{
-            display:grid; grid-template-columns: max-content minmax(0, 84px); gap:8px; align-items:center;
-          }
-          .sora-subnote{ font-size:12px; color:#9aa; margin-top:6px; }
         </style>
   
         <div id="sora-launcher-button" title="Open Sora Batch Downloader">
@@ -230,6 +224,7 @@
           <div id="sora-app-view">
             <div class="sora-row">
               <button id="sora-run-button" class="sora-btn">Generate Download Script</button>
+              <button id="sora-stop-button" class="sora-btn danger" style="display:none;">Stop Direct</button>
               <button id="sora-copy-button" class="sora-btn secondary" style="display:none;">Copy Script</button>
               <button id="sora-export-manifest-btn" class="sora-btn secondary" style="display:none;">Export Manifest (CSV/JSON)</button>
             </div>
@@ -244,21 +239,20 @@
                 <div id="sora-settings-close-button" title="Close">&times;</div>
               </div>
   
-              <div class="sora-setting-row sora-setting-group">
+              <!-- COMPACT (classic) -->
+              <div class="sora-row-compact sora-setting-group">
                 <label>Download Mode:</label>
-                <div id="sora-download-mode-selector" style="display:flex; gap:14px;">
-                  <div id="sora-final-quality-option">
-                    <input type="radio" id="sora-mode-final" name="sora-download-mode" value="final">
-                    <label for="sora-mode-final">Final Quality (no watermark)</label>
-                  </div>
-                  <div>
-                    <input type="radio" id="sora-mode-fast" name="sora-download-mode" value="fast">
-                    <label for="sora-mode-fast">Fast Download (with watermark)</label>
-                  </div>
+                <div>
+                  <label style="margin-right:16px;">
+                    <input type="radio" id="sora-mode-final" name="sora-download-mode" value="final"> Final Quality (no watermark)
+                  </label>
+                  <label>
+                    <input type="radio" id="sora-mode-fast" name="sora-download-mode" value="fast"> Fast Download (with watermark)
+                  </label>
                 </div>
               </div>
   
-              <div id="sora-fast-quality-container" class="sora-setting-row">
+              <div id="sora-fast-quality-container" class="sora-row-compact">
                 <label for="sora-fast-quality-select">Fast Quality:</label>
                 <select id="sora-fast-quality-select">
                   <option value="source">Source (HD)</option>
@@ -267,33 +261,44 @@
                 </select>
               </div>
   
-              <div id="sora-parallel-container" class="sora-setting-row">
+              <div id="sora-parallel-container" class="sora-row-compact">
                 <label for="sora-parallel-input">Parallel RAW requests:</label>
                 <input type="number" id="sora-parallel-input" min="1" max="20">
               </div>
   
-              <div class="sora-setting-row" id="sora-limit-row">
+              <div class="sora-row-compact" id="sora-limit-row">
                 <label for="sora-limit-input">List limit (max 100):</label>
                 <input type="number" id="sora-limit-input" min="1" max="100">
               </div>
   
-              <div class="sora-setting-row">
+              <div class="sora-row-compact">
                 <label for="sora-dryrun-checkbox">Dry-run (comment out curls)</label>
                 <input type="checkbox" id="sora-dryrun-checkbox">
               </div>
   
-              <!-- Direct download (by tasks) -->
-              <div class="sora-setting-row sora-setting-group">
+              <!-- DIRECT (block layout only for this section) -->
+              <div class="sora-row-block sora-setting-group">
                 <label>Direct download (small batches)</label>
-                <div class="sora-inline">
-                  <label><input type="checkbox" id="sora-direct-checkbox"> Enable</label>
-                  <label class="kv"><span>Max tasks</span><input type="number" id="sora-direct-max" min="1" max="100"></label>
-                  <label class="kv"><span>Parallel</span><input type="number" id="sora-direct-parallel" min="1" max="6"></label>
-                </div>
+                <label><input type="checkbox" id="sora-direct-checkbox"> Enable</label>
               </div>
-              <div class="sora-subnote">Each task can yield up to 4 videos. For example, 5 tasks ≈ up to 20 downloads.</div>
   
-              <button id="sora-settings-save-button" class="sora-btn" style="margin-top:8px;">Save & Close</button>
+              <div class="sora-row-block">
+                <label for="sora-direct-max">Max tasks</label>
+                <input type="number" id="sora-direct-max" min="1" max="100">
+                <div class="sora-subnote">Each task can yield up to 4 videos. For example, 5 tasks ≈ up to 20 downloads.</div>
+              </div>
+  
+              <div class="sora-row-block">
+                <label for="sora-direct-parallel">Parallel (browser downloads)</label>
+                <input type="number" id="sora-direct-parallel" min="1" max="6">
+              </div>
+  
+              <div class="sora-row-block">
+                <label for="sora-direct-saveas">Save As prompt for each file</label>
+                <input type="checkbox" id="sora-direct-saveas">
+              </div>
+  
+              <button id="sora-settings-save-button" class="sora-btn" style="margin-top:6px;">Save & Close</button>
             </div>
           </div>
         </div>
@@ -309,6 +314,7 @@
       ui.settingsBtn        = root.getElementById('sora-settings-button');
       ui.closeBtn           = root.getElementById('sora-close-button');
       ui.runBtn             = root.getElementById('sora-run-button');
+      ui.stopBtn            = root.getElementById('sora-stop-button');
       ui.statusDiv          = root.getElementById('sora-status');
       ui.resultTA           = root.getElementById('sora-result-textarea');
       ui.copyBtn            = root.getElementById('sora-copy-button');
@@ -324,7 +330,6 @@
       ui.limitRow           = root.getElementById('sora-limit-row');
       ui.limitInput         = root.getElementById('sora-limit-input');
       ui.dryRunCheckbox     = root.getElementById('sora-dryrun-checkbox');
-      ui.finalQualityOption = root.getElementById('sora-final-quality-option');
       ui.fastQualityContainer = root.getElementById('sora-fast-quality-container');
       ui.parallelContainer    = root.getElementById('sora-parallel-container');
   
@@ -332,6 +337,7 @@
       const chkDirect          = root.getElementById('sora-direct-checkbox');
       const inpDirectMaxTasks  = root.getElementById('sora-direct-max');
       const inpDirectParallel  = root.getElementById('sora-direct-parallel');
+      const chkDirectSaveAs    = root.getElementById('sora-direct-saveas');
   
       // Helpers
       function renderNoTokenView() {
@@ -353,14 +359,10 @@
       function updateSettingsUI() {
         // lock final-quality if unavailable
         if (!userCapabilities.can_download_without_watermark) {
-          ui.finalQualityOption.title = 'Your plan does not allow downloading without watermark.';
           ui.modeFinalRadio.disabled = true;
-          ui.finalQualityOption.classList.add('sora-disabled-option');
           currentSettings.fastDownload = true;
         } else {
-          ui.finalQualityOption.title = '';
           ui.modeFinalRadio.disabled = false;
-          ui.finalQualityOption.classList.remove('sora-disabled-option');
         }
         populateSettingsPanel();
         updateRunButtonLabel();
@@ -377,6 +379,7 @@
         chkDirect.checked             = currentSettings.directDownload;
         inpDirectMaxTasks.value       = currentSettings.directMaxTasks;
         inpDirectParallel.value       = currentSettings.directParallel;
+        chkDirectSaveAs.checked       = currentSettings.directSaveAs;
   
         toggleSettingsInteractivity(currentSettings.fastDownload);
         applyDirectDisable(currentSettings.directDownload);
@@ -387,23 +390,21 @@
         ui.parallelContainer.classList.toggle('sora-setting-inactive', isFast);
         ui.fastQualityContainer.classList.toggle('sora-setting-inactive', !isFast);
       }
-  
       function applyDirectDisable(enabled) {
         ui.limitRow.classList.toggle('sora-setting-inactive', enabled);
         ui.limitInput.disabled = enabled;
       }
-  
       function updateRunButtonLabel() {
         ui.runBtn.textContent = currentSettings.directDownload ? 'Direct Download' : 'Generate Download Script';
+        ui.stopBtn.style.display = directRunning ? 'inline-block' : 'none';
       }
   
       // Events
-      root.getElementById('sora-download-mode-selector').addEventListener('change', (e) => {
-        if (e.target.name === 'sora-download-mode') toggleSettingsInteractivity(e.target.value === 'fast');
-      });
+      ui.modeFinalRadio?.addEventListener('change', () => toggleSettingsInteractivity(false));
+      ui.modeFastRadio?.addEventListener('change', () => toggleSettingsInteractivity(true));
       chkDirect.addEventListener('change', () => {
         applyDirectDisable(chkDirect.checked);
-        currentSettings.directDownload = chkDirect.checked; // reflect temp state in label
+        currentSettings.directDownload = chkDirect.checked;
         updateRunButtonLabel();
       });
   
@@ -432,6 +433,7 @@
         currentSettings.directDownload = !!chkDirect.checked;
         currentSettings.directMaxTasks = clampInt(inpDirectMaxTasks.value, 1, 100, DEFAULT_SETTINGS.directMaxTasks);
         currentSettings.directParallel = clampInt(inpDirectParallel.value, 1, 6, DEFAULT_SETTINGS.directParallel);
+        currentSettings.directSaveAs   = !!chkDirectSaveAs.checked;
   
         await saveSettings();
         ui.settingsPanel.style.display = 'none';
@@ -446,6 +448,10 @@
           document.execCommand('copy'); sel.removeAllRanges();
         }
         ui.copyBtn.textContent = 'Copied!'; setTimeout(() => ui.copyBtn.textContent = 'Copy Script', 1500);
+      });
+  
+      ui.stopBtn.addEventListener('click', async () => {
+        await send(API.cancelDirect());
       });
   
       // Manifest export
@@ -488,7 +494,6 @@
         };
   
         try {
-          // When Direct is ON, list limit is overridden by "Max tasks"
           const listLimit = currentSettings.directDownload ? currentSettings.directMaxTasks : currentSettings.limit;
   
           updateProgressUI('Step 1/3: Fetching & filtering list...', -1);
@@ -532,10 +537,11 @@
             const doDirect = currentSettings.directDownload && validTasksCount <= currentSettings.directMaxTasks;
             if (doDirect) {
               ui.statusDiv.textContent = `Direct: starting downloads for ${validTasksCount} task(s) (parallel ${currentSettings.directParallel})…`;
-              await send(API.startDirect(rows.map(r => ({ url: r.url, filename: r.filename })), currentSettings.directParallel));
+              directRunning = true;
+              updateRunButtonLabel();
+              await send(API.startDirect(rows.map(r => ({ url: r.url, filename: r.filename })), currentSettings.directParallel, currentSettings.directSaveAs));
             }
   
-            // Always output script as fallback
             const script = generateScript(rows, lastManifest.mode, lastManifest.quality, skipped, failures, currentSettings.dryRun);
             ui.resultTA.value = script;
   
@@ -560,7 +566,7 @@
           ui.resultTA.value = `An error occurred.\n\n${err.stack || String(err)}`;
         } finally {
           ui.runBtn.disabled = false;
-          updateRunButtonLabel(); // revert label to current mode
+          updateRunButtonLabel();
           ui.launcher.title = 'Open Sora Batch Downloader';
           ui.launcherBorder.style.animation = '';
           ui.launcherBorder.style.backgroundImage = '';
@@ -584,8 +590,12 @@
           } else {
             ui.statusDiv.textContent = base;
           }
-        } else if (phase === 'done') {
-          ui.statusDiv.textContent = `Direct: completed ${msg.done}/${msg.total}`;
+        } else if (phase === 'cancel_start') {
+          ui.statusDiv.textContent = 'Direct: cancel requested…';
+        } else if (phase === 'cancel_done' || phase === 'done') {
+          ui.statusDiv.textContent = `Direct: completed ${msg.done ?? ''}${msg.total ? '/' + msg.total : ''}`;
+          directRunning = false;
+          updateRunButtonLabel();
         }
       });
   
@@ -654,9 +664,8 @@
       return String(s||'').normalize('NFKD').replace(/[\/\\?%*:|"<>]/g,'_').replace(/\s+/g,' ').trim().slice(0,120);
     }
     function generateScript(downloadRows, mode, quality, skipped, failures, dryRun) {
-      const shebang = '#!/bin/bash';
       const hdr = [
-        shebang,
+        '#!/bin/bash',
         `# Download script for ${downloadRows.length} Sora videos`,
         `# Mode: ${mode === 'fast' ? `Fast Download (Watermarked, ${quality})` : 'Final Quality (No Watermark)'}`,
         `# Format: curl`,
