@@ -5,6 +5,7 @@ To circumvent the overall pain that feels any heavy sora user regarding download
 
 ## In Action
 <img width="657" height="637" alt="image" src="https://github.com/user-attachments/assets/30ba8653-1301-4de7-bb88-78e6ad0bf01d" />
+<img width="572" height="514" alt="image" src="https://github.com/user-attachments/assets/39efb106-6ef7-46c8-97c2-846aae5bb028" />
 
 
 ## Features
