@@ -1,6 +1,6 @@
-// content.js — v0.5.3 (hotfix)
+// content.js — v0.5.3 (hotfix3)
 // DL → OPFS → ZIP (STORE) → single browser download
-// HUD in panel + mini badge on launcher; Stop is reliable; safe listeners.
+// HUD in panel + mini badge on launcher; Stop is reliable; safe listeners; Settings panel restored.
 
 (() => {
     'use strict';
@@ -109,7 +109,6 @@
     }
   
     // Write ZIP (STORE) from OPFS files to final handle (no compression).
-    // NOTE: classic PKZIP (no ZIP64) – upgrade if single file >4GB or very large offsets.
     async function writeZipFromOPFS({ metas, saveHandle, onStatus, signal }) {
       const writable = await saveHandle.createWritable();
       let offset = 0;
@@ -125,9 +124,9 @@
         const LFH = new Uint8Array(30 + nameBytes.length);
         const dv = new DataView(LFH.buffer);
         dv.setUint32(0, 0x04034b50, true);
-        dv.setUint16(4, 20, true);     // version needed
-        dv.setUint16(6, 0, true);      // flags
-        dv.setUint16(8, 0, true);      // method STORE
+        dv.setUint16(4, 20, true);
+        dv.setUint16(6, 0, true);
+        dv.setUint16(8, 0, true);      // STORE
         dv.setUint16(10, now[0], true);
         dv.setUint16(12, now[1], true);
         dv.setUint32(14, m.crc >>> 0, true);
@@ -158,8 +157,8 @@
         const CEN = new Uint8Array(46 + nameBytes.length);
         const cdv = new DataView(CEN.buffer);
         cdv.setUint32(0, 0x02014b50, true);
-        cdv.setUint16(4, 20, true);  // version made by
-        cdv.setUint16(6, 20, true);  // version needed
+        cdv.setUint16(4, 20, true);
+        cdv.setUint16(6, 20, true);
         cdv.setUint16(8, 0, true);
         cdv.setUint16(10, 0, true);  // STORE
         cdv.setUint16(12, now[0], true);
@@ -181,7 +180,7 @@
         onStatus?.({ phase: 'zip-file-done', file: m.name, done, total: metas.length });
       }
   
-      // central dir
+      // Central dir
       let cdSize = 0, cdOffset = offset;
       for (const c of central) { await writeBuf(writable, c); cdSize += c.length; }
       offset += cdSize;
@@ -233,7 +232,7 @@
         chrome.storage.sync.get('soraDownloaderSettings', (data) => {
           try {
             const saved = data?.soraDownloaderSettings ? JSON.parse(data.soraDownloaderSettings) : {};
-          if (saved.directMaxItems && !saved.directMaxTasks) saved.directMaxTasks = saved.directMaxItems;
+            if (saved.directMaxItems && !saved.directMaxTasks) saved.directMaxTasks = saved.directMaxItems;
             currentSettings = { ...DEFAULT_SETTINGS, ...saved };
             currentSettings.limit          = clampInt(currentSettings.limit, 1, DEFAULT_LIMIT, DEFAULT_SETTINGS.limit);
             currentSettings.directMaxTasks = clampInt(currentSettings.directMaxTasks, 1, 100, DEFAULT_SETTINGS.directMaxTasks);
@@ -335,15 +334,12 @@
   
           .sora-settings-content{ display:flex; flex-direction:column; gap:12px; max-width:100%; min-width:0; }
           #sora-settings-header{ display:flex; align-items:center; justify-content:space-between; }
-  
           .sora-row-compact{ display:flex; align-items:center; justify-content:space-between; gap:12px; }
           .sora-row-compact > label{ color:#ccc; }
-  
           .sora-row-block{ display:flex; flex-direction:column; align-items:flex-start; gap:8px; padding-top:4px; }
           .sora-setting-group{ border-top:1px solid #333; padding-top:10px; margin-top:6px; }
           .sora-setting-inactive{ opacity:0.5; pointer-events:none; }
           .sora-subnote{ font-size:12px; color:#9aa; margin-top:2px; }
-  
           input[type="number"], select{
             background:#111; color:#eee; border:1px solid #444; border-radius:6px; padding:6px; min-width: 120px;
           }
@@ -356,8 +352,8 @@
             display: none; z-index: 2147483647; user-select:none;
             background:#0d6efd;
           }
-          #sora-mini-badge.dl  { background:#0d6efd; }  /* blue */
-          #sora-mini-badge.zip { background:#8b5cf6; }  /* violet */
+          #sora-mini-badge.dl  { background:#0d6efd; }
+          #sora-mini-badge.zip { background:#8b5cf6; }
   
           /* Panel progress HUD */
           #sora-progress{
@@ -414,6 +410,62 @@
             <div id="sora-status">Ready.</div>
             <textarea id="sora-result-textarea" readonly placeholder="# The script will appear here..."></textarea>
           </div>
+  
+          <!-- SETTINGS PANEL (restored) -->
+          <div id="sora-settings-panel">
+            <div class="sora-settings-content">
+              <div id="sora-settings-header">
+                <h4 style="margin:0;">Settings</h4>
+                <div id="sora-settings-close-button" title="Close">&times;</div>
+              </div>
+  
+              <div class="sora-row-compact sora-setting-group">
+                <label>Download Mode:</label>
+                <div>
+                  <label><input type="radio" id="sora-mode-final" name="sora-download-mode" value="final"> Final Quality (no watermark)</label>
+                  <label style="margin-left:16px;"><input type="radio" id="sora-mode-fast" name="sora-download-mode" value="fast"> Fast Download (with watermark)</label>
+                </div>
+              </div>
+  
+              <div id="sora-fast-quality-container" class="sora-row-compact">
+                <label for="sora-fast-quality-select">Fast Quality:</label>
+                <select id="sora-fast-quality-select">
+                  <option value="source">Source (HD)</option>
+                  <option value="md">Medium</option>
+                  <option value="ld">Low</option>
+                </select>
+              </div>
+  
+              <div id="sora-parallel-container" class="sora-row-compact">
+                <label for="sora-parallel-input">Parallel RAW requests:</label>
+                <input type="number" id="sora-parallel-input" min="1" max="20">
+              </div>
+  
+              <div id="sora-limit-row" class="sora-row-compact">
+                <label for="sora-limit-input">List limit (max 100):</label>
+                <input type="number" id="sora-limit-input" min="1" max="100">
+              </div>
+  
+              <div class="sora-row-compact">
+                <label for="sora-dryrun-checkbox">Dry-run (comment out curls)</label>
+                <input type="checkbox" id="sora-dryrun-checkbox">
+              </div>
+  
+              <div class="sora-setting-group sora-row-block">
+                <label>Direct download (small batches)</label>
+                <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                  <label><input type="checkbox" id="sora-direct-checkbox"> Enable</label>
+                  <label>Max tasks <input type="number" id="sora-direct-max" min="1" max="100" style="width:90px"></label>
+                  <label>Parallel <input type="number" id="sora-direct-parallel" min="1" max="6" style="width:70px"></label>
+                  <label><input type="checkbox" id="sora-direct-saveas"> Save As (per file)</label>
+                  <label><input type="checkbox" id="sora-direct-zip" checked> Zip at end (one file)</label>
+                </div>
+                <div class="sora-subnote">Each task can yield up to 4 videos. For example, 5 tasks ≈ up to 20 downloads.</div>
+              </div>
+  
+              <button id="sora-settings-save-button" class="sora-btn" style="margin-top:8px; align-self:center;">Save & Close</button>
+            </div>
+          </div>
         </div>
   
         <div id="sora-mini-badge"></div>
@@ -436,7 +488,7 @@
       ui.copyBtn        = root.getElementById('sora-copy-button');
       ui.exportBtn      = root.getElementById('sora-export-manifest-btn');
   
-      // Settings elements (classic)
+      // Settings elements
       ui.settingsPanel  = root.getElementById('sora-settings-panel');
       ui.settingsSave   = root.getElementById('sora-settings-save-button');
       ui.modeFinalRadio = root.getElementById('sora-mode-final');
@@ -450,7 +502,6 @@
       ui.parallelContainer    = root.getElementById('sora-parallel-container');
   
       // Direct controls
-      // (Optional UI — if you have these inputs in your settings panel, wire them here)
       const chkDirect         = root.getElementById('sora-direct-checkbox');
       const inpDirectMaxTasks = root.getElementById('sora-direct-max');
       const inpDirectParallel = root.getElementById('sora-direct-parallel');
@@ -512,7 +563,6 @@
         if (ui.limitInput)     ui.limitInput.value       = currentSettings.limit;
         if (ui.dryRunCheckbox) ui.dryRunCheckbox.checked = currentSettings.dryRun;
   
-        // Direct UI (if present)
         if (chkDirect)         chkDirect.checked         = currentSettings.directDownload;
         if (inpDirectMaxTasks) inpDirectMaxTasks.value   = currentSettings.directMaxTasks;
         if (inpDirectParallel) inpDirectParallel.value   = currentSettings.directParallel;
@@ -539,7 +589,7 @@
         ui.stopBtn.style.display = directRunning ? 'inline-block' : 'none';
       }
   
-      // Safe listeners (guards)
+      // Safe listeners
       ui.modeFinalRadio?.addEventListener('change', () => toggleSettingsInteractivity(false));
       ui.modeFastRadio?.addEventListener('change', () => toggleSettingsInteractivity(true));
   
@@ -552,18 +602,17 @@
       ui.closeBtn?.addEventListener('click', () => {
         ui.panel.style.display = 'none';
         ui.launcher.style.display = 'flex';
-        setMiniBadge(mini.textContent); // re-evaluate visibility
+        setMiniBadge(mini.textContent);
       });
   
       ui.settingsBtn?.addEventListener('click', () => {
         populateSettingsPanel();
-        ui.settingsPanel.style.display = 'block';
+        ui.settingsPanel && (ui.settingsPanel.style.display = 'block');
       });
       root.getElementById('sora-settings-close-button')?.addEventListener('click', () => {
-        ui.settingsPanel.style.display = 'none';
+        ui.settingsPanel && (ui.settingsPanel.style.display = 'none');
       });
   
-      // Direct toggles (if the checkbox exists)
       chkDirect?.addEventListener('change', () => {
         currentSettings.directDownload = !!chkDirect.checked;
         applyDirectDisable(currentSettings.directDownload);
@@ -584,7 +633,7 @@
         if (chkDirectZip)      currentSettings.directZip      = !!chkDirectZip.checked;
   
         await saveSettings();
-        ui.settingsPanel.style.display = 'none';
+        ui.settingsPanel && (ui.settingsPanel.style.display = 'none');
         updateRunButtonLabel();
       });
   
@@ -915,7 +964,7 @@
       const cmdPrefix = dryRun ? '# ' : '';
       for (const row of downloadRows) {
         const fname = safeName(fileNameFor(row.id));
-        blocks.push(`${cmdPrefix}curl -L -C - --fail --retry 5 --retry-delay 2 -o "${fname}" "${row.url.replace(/"/g,'\\"')}"`);
+        blocks.push(`${cmdPrefix}curl -L - C - --fail --retry 5 --retry-delay 2 -o "${fname}" "${row.url.replace(/"/g,'\\"')}"`.replace(' - C',' -C'));
       }
       blocks.push(``, `echo "Download completed!"`);
       return [...hdr, ...blocks].join('\n');
