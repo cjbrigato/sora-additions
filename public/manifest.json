@@ -1,8 +1,8 @@
 {
     "manifest_version": 3,
     "name": "Sora Batch Downloader (Generator)",
-    "version": "0.6.0",
-    "description": "Retrieve Sora generations via ZIP (one-click) or Direct modes, with a clean HUD and minimal friction.",
+    "version": "0.8.0",
+    "description": "Retrieve Sora generations via ZIP (one-click) or script (curl), optional manfifests - with a clean HUD and minimal friction.",
     "icons": { "128": "icons/icon128.png" },
   
     "permissions": ["storage", "downloads"],
