@@ -3,8 +3,8 @@
 Chrome extension that plugs **directly** into Sora’s UI to help you retrieve your own generations — fast, reliably, and without fighting the site every time.
 
 ## In Action
-<img width="380" height="253" alt="image" src="https://github.com/user-attachments/assets/15437475-4b86-468c-9961-2a45f922b96c" />
-<img width="572" height="514" alt="image" src="https://github.com/user-attachments/assets/39efb106-6ef7-46c8-97c2-846aae5bb028" />
+<img width="456" height="303" alt="image" src="https://github.com/user-attachments/assets/15437475-4b86-468c-9961-2a45f922b96c" />
+<img width="440" height="395" alt="image" src="https://github.com/user-attachments/assets/39efb106-6ef7-46c8-97c2-846aae5bb028" />
 <img width="352" height="166" alt="image" src="https://github.com/user-attachments/assets/c023b8d8-c021-4a6f-ab06-bb39bd5817c8" />
 
 
