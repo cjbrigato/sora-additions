@@ -20,7 +20,7 @@
   
     "web_accessible_resources": [
       {
-        "resources": ["pageHook.js"],
+        "resources": ["pageHook.js", "shadow.html"],
         "matches": ["https://sora.chatgpt.com/*"]
       }
     ]

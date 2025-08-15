@@ -54,7 +54,7 @@ window.addEventListener('sora-token', async (ev: any) => {
 
 window.addEventListener('load', async () => {
   settings = await loadSettings();
-  refs = buildUI();
+  refs = await buildUI();
   wireUI();
   renderNoTokenView();
   updateRunLabel();
@@ -150,7 +150,11 @@ function wireUI() {
   refs.hdrClose?.addEventListener('click', () => {
     refs.panel.style.display = 'none';
     (refs.launch as HTMLElement).style.display = 'flex';
-    setMiniBadge(refs, refs.badge.textContent || '', undefined);
+    if (!opActive) {
+      clearMiniBadge(refs);
+    } else {
+      setMiniBadge(refs, refs.badge.textContent || '', undefined);
+    }
   });
 
   // settings open/close
