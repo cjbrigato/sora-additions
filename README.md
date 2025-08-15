@@ -3,18 +3,18 @@
 Chrome extension that plugs **directly** into Sora’s UI to help you retrieve your own generations — fast, reliably, and without fighting the site every time.
 
 ## In Action
+<img width="456" height="303" alt="image" src="https://github.com/user-attachments/assets/15437475-4b86-468c-9961-2a45f922b96c" />
+<img width="440" height="395" alt="image" src="https://github.com/user-attachments/assets/39efb106-6ef7-46c8-97c2-846aae5bb028" />
+<img width="453" height="135" alt="image" src="https://github.com/user-attachments/assets/6c9c985c-1e82-47f2-8ccc-8328669b3d1c" />
+<img width="454" height="124" alt="image" src="https://github.com/user-attachments/assets/e789670b-9ca0-482a-81ec-a8f3264e07e2" />
 
-<img width="657" height="637" alt="image" src="https://github.com/user-attachments/assets/30ba8653-1301-4de7-bb88-78e6ad0bf01d" />
-<img width="572" height="514" alt="image" src="https://github.com/user-attachments/assets/39efb106-6ef7-46c8-97c2-846aae5bb028" />
 
 ## Features
+* Supports **images** and **videos** batch download
 
-* **Two retrieval modes**
-
-  * **ZIP mode (default, batches):** downloads files **locally**, then streams a **single ZIP (STORE)** and triggers **one** browser download. Respects Chrome’s *Always ask where to save*; appears once in the Downloads list.
-  * **Direct mode (small batches):** uses `chrome.downloads` with a **queue** (parallelism configurable), optional per-file **Save As**.
+* **Retrieval modes**
+  * **ZIP mode (default, batches):** downloads files **locally**, then streams a **single ZIP (STORE)** and triggers **one** browser download. Respects Chrome’s *Always ask where to save*; appears once in the Downloads list. Flow: **DL → OPFS → ZIP → single browser download**.
 * **Smart & safe**
-
   * **Task-gating:** Direct/ZIP operates on up to **N tasks** (cap configurable), with the website list also capped at **100** by design. Each task can yield **up to 4 videos**.
   * **Permission-aware:** if your plan doesn’t allow watermark-free download, **Final** is disabled; you can still use **Fast Preview**.
   * **Filtering:** skips failed/moderated generations; shows reasons in the output.
@@ -30,23 +30,19 @@ Chrome extension that plugs **directly** into Sora’s UI to help you retrieve y
 ## Modes & Options (quick overview)
 
 * **Download Mode**
-
   * **Final Quality** (no watermark) — if allowed by your plan.
   * **Fast Preview** (watermarked source/MD/LD).
-* **Direct Download (small batches)**
-
-  * **Enable**, **Max tasks**, **Parallel** (1–6), **Save As** (per file).
-* **ZIP mode (batches)**
-
-  * Enabled by default. Flow: **DL → OPFS → ZIP → single browser download**.
-    *No picker mid-process; picker only appears if your Chrome setting asks at download time.*
+* **Enable**, **Max tasks**, **Parallel** (1–6).
 
 ## Install
 
 1. **Clone** (or download) this repo locally.
-2. Open `chrome://extensions` → toggle **Developer mode**.
-3. Click **Load unpacked** → select the project folder.
-4. Go to `https://sora.chatgpt.com/` — a round launcher appears bottom-right.
+# build via npm
+2. run `npm install`
+3. run `npm run dev` for local development on `npm run build` for production build
+4. Open `chrome://extensions` → toggle **Developer mode**.
+5. Click **Load unpacked** → select the project's `dist` folder.
+6. Go to `https://sora.chatgpt.com/` — a round launcher appears bottom-right.
 
 > The extension works entirely client-side.
 > The bearer token is captured in-page and stored in **`chrome.storage.session`** (memory only), not persisted to disk, and never sent to external servers.
@@ -55,7 +51,7 @@ Chrome extension that plugs **directly** into Sora’s UI to help you retrieve y
 
 1. Open Sora and interact normally; the panel may show **“Awaiting Token…”** until you view/create a video.
 2. Click the launcher → **Settings** (⚙️) to choose mode & options.
-3. Click **Zip & Download** (ZIP mode) or **Direct Download** (small batches), or **Generate Download Script** (fallback).
+3. Click **Zip & Download** (ZIP mode)  or **Generate Download Script** (fallback).
 4. Watch the HUD (panel) and the mini badge (closed panel) for **DL x/y** then **ZIP x/y**.
 5. When ZIP finishes, the extension triggers **one browser download** of the `.zip`.
 

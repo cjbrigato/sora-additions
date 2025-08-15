@@ -1,0 +1,17 @@
+{
+    "name": "sora-downloader",
+    "version": "0.6.0",
+    "private": true,
+    "type": "module",
+    "scripts": {
+      "dev": "vite build --watch",
+      "build": "vite build",
+      "clean": "rimraf dist"
+    },
+    "devDependencies": {
+      "rimraf": "^5.0.5",
+      "typescript": "^5.5.4",
+      "vite": "^5.4.0"
+    }
+  }
+  
