@@ -317,9 +317,9 @@ async function runOnce() {
         setPanelProgress(refs, 0, 'Fetching URLs (0/0)', '');
         setMiniBadge(refs, `URL 0/0`, 'dl');
 
-        const ids = valid.map(g => g.id);
+        const gen_subsets = valid.map(g => ({ id: g.id, task_id: g.task_id || '' }));
         const { successes, failures: f } =
-          await fetchRawWithConcurrency(ids, settings.workers, (text, pct) => {
+          await fetchRawWithConcurrency(gen_subsets, settings.workers, (text, pct) => {
             // Parse "(x/y)" to display counts
             const m = /(\d+)\s*\/\s*(\d+)\)/.exec(text);
             if (m) {
