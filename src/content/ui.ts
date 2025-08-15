@@ -17,7 +17,7 @@ export type UIRefs = {
     parallelRow?: HTMLElement; parallel?: HTMLInputElement;
     limitRow?: HTMLElement; limit?: HTMLInputElement;
     dry?: HTMLInputElement;
-    direct?: HTMLInputElement; maxTasks?: HTMLInputElement; dParallel?: HTMLInputElement; saveAs?: HTMLInputElement; zip?: HTMLInputElement;
+    direct?: HTMLInputElement; maxTasks?: HTMLInputElement; dParallel?: HTMLInputElement;
     btnSave?: HTMLButtonElement;
     shadowIsLoaded: boolean;
 };
@@ -58,7 +58,7 @@ export async function buildUI(): Promise<UIRefs> {
         parallelRow: $('parallel-row'), parallel: $('parallel') as HTMLInputElement,
         limitRow: $('limit-row'), limit: $('limit') as HTMLInputElement,
         dry: $('dry') as HTMLInputElement,
-        direct: $('direct') as HTMLInputElement, maxTasks: $('maxTasks') as HTMLInputElement, dParallel: $('dParallel') as HTMLInputElement, saveAs: $('saveAs') as HTMLInputElement, zip: $('zip') as HTMLInputElement,
+        direct: $('direct') as HTMLInputElement, maxTasks: $('maxTasks') as HTMLInputElement, dParallel: $('dParallel') as HTMLInputElement,
         btnSave: $('btn-save') as HTMLButtonElement,
         shadowIsLoaded
     };

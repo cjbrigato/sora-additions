@@ -106,8 +106,8 @@ function populateSettings() {
   refs.direct    && (refs.direct.checked    = settings.directDownload);
   refs.maxTasks  && (refs.maxTasks.value    = String(settings.directMaxTasks));
   refs.dParallel && (refs.dParallel.value   = String(settings.directParallel));
-  refs.saveAs    && (refs.saveAs.checked    = settings.directSaveAs);
-  refs.zip       && (refs.zip.checked       = settings.directZip);
+  settings.directZip = true;
+  settings.directSaveAs = false;
 
   toggleFast(settings.fastDownload);
   applyDirectDisable(settings.directDownload);
@@ -177,8 +177,8 @@ function wireUI() {
     settings.directDownload = !!refs.direct?.checked;
     settings.directMaxTasks = clampInt(refs.maxTasks?.value, 1, 100, DEFAULT_SETTINGS.directMaxTasks);
     settings.directParallel = clampInt(refs.dParallel?.value, 1, 6, DEFAULT_SETTINGS.directParallel);
-    settings.directSaveAs   = !!refs.saveAs?.checked;
-    settings.directZip      = !!refs.zip?.checked;
+    settings.directSaveAs   = false;
+    settings.directZip      = true;
 
     await saveSettings(settings);
     refs.settings.style.display = 'none';

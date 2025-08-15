@@ -475,13 +475,14 @@
             </div>
 
             <div class="rowb group">
-                <label>Direct download (small batches)</label>
+                <label>Direct download (ZIP mode)</label>
+                <div class="sub">Direct download within a single final zip. Can take a while to complete.</div>
                 <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
                     <label><input type="checkbox" id="direct"> Enable</label>
                     <label>Max tasks <input type="number" id="maxTasks" min="1" max="100" style="width:90px"></label>
                     <label>Parallel <input type="number" id="dParallel" min="1" max="6" style="width:70px"></label>
-                    <label><input type="checkbox" id="saveAs"> Save As (per file)</label>
-                    <label><input type="checkbox" id="zip" checked> Zip at end (one file)</label>
+                    <!-- <label><input type="checkbox" id="saveAs"> Save As (per file)</label> -->
+                    <!-- <label><input type="checkbox" id="zip" checked> Zip at end (one file)</label> -->
                 </div>
                 <div class="sub">Each task can yield up to 4 videos. Example: 5 tasks ≈ up to 20 downloads.</div>
             </div>
