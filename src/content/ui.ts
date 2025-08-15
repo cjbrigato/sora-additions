@@ -119,7 +119,7 @@ export function buildUI(): UIRefs {
         .sline{ color:#aaa; font-size:12px; text-align:center; max-width:90%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
           #btn-settings{
-            background:transparent; border:1px solid #444; color:#ddd; padding:4px 8px; border-radius:8px; cursor:pointer;
+            background:transparent; border:1px solid #444; color:#ddd; padding:4px 8px; border-radius:8px; cursor:pointer; font-size:12px;
           }
           #btn-settings:hover{ border-color:#777; color:#fff; }
       </style>
@@ -135,7 +135,7 @@ export function buildUI(): UIRefs {
       <div id="panel">
         <div id="hdr">
           <button id="btn-settings" class="btn ghost" title="Settings">⚙️ Settings</button>
-          <h3 style="margin:0;">Sora Batch Downloader</h3>
+          <h3 style="margin:0;font-weight:lighter;">Sora Batch Downloader</h3>
           <div id="close" title="Close">&times;</div>
         </div>
   

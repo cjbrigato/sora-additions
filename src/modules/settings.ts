@@ -20,7 +20,7 @@ export const DEFAULT_SETTINGS: Settings = {
   limit: DEFAULT_LIMIT,
   dryRun: false,
   directDownload: false,
-  directMaxTasks: 20,
+  directMaxTasks: 10,
   directParallel: 3,
   directSaveAs: false,
   directZip: true

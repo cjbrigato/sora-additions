@@ -135,7 +135,10 @@ function updateRunLabel() {
 function wireUI() {
   // radios
   refs.modeFinal?.addEventListener('change', () => toggleFast(false));
-  refs.modeFast ?.addEventListener('change', () => toggleFast(true));
+  refs.modeFast?.addEventListener('change', () => toggleFast(true));
+  if (refs.direct) {
+    refs.direct.addEventListener('change', () => applyDirectDisable(refs.direct!.checked));
+  }
 
   // open / close
   refs.launch?.addEventListener('click', () => {
