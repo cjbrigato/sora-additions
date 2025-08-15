@@ -238,6 +238,8 @@ function wireUI() {
 // ---------- Run flow ----------
 async function runOnce() {
   refs.runBtn.disabled = true;
+  refs.tasktype.disabled = true;
+  refs.settingsBtn.disabled = true;
   refs.copyBtn.style.display = 'none';
   refs.exportBtn.style.display = 'none';
   refs.out.value = '';
@@ -253,7 +255,7 @@ async function runOnce() {
 
     refs.status.textContent = 'Step 1/3: Fetching & filtering list...';
 
-    const resList = await send({ type: 'FETCH_LIST', limit: listLimit });
+    const resList = await send({ type: 'FETCH_LIST', limit: listLimit, tasktype: refs.tasktype.value });
     if (!resList?.ok) throw new Error(resList?.error || 'List fetch failed');
     const tasks: Task[] = Array.isArray(resList.json?.task_responses) ? resList.json.task_responses : [];
 
@@ -265,7 +267,16 @@ async function runOnce() {
     let failures: { id: string; reason: string }[] = [];
 
     if (valid.length) {
-      if (settings.fastDownload) {
+      if (refs.tasktype.value === 'images') {
+        refs.status.textContent = 'Step 2/3: Extracting URLs directly (Images mode)...';
+        rows = valid.map((gen) => {
+          const url = (gen.url || null);
+          return url ? { id: gen.id, url, filename: `sora_${gen.id}.png` } : null as any;
+        }).filter(Boolean);
+        setPanelProgress(refs, 100, 'Extracted URLs', '');
+        setLauncherPct(100);
+      }
+      else if (settings.fastDownload) {
         refs.status.textContent = 'Step 2/3: Extracting URLs directly (fast mode)...';
         rows = valid.map((gen) => {
           const q = settings.fastDownloadQuality;
@@ -386,10 +397,11 @@ async function runOnce() {
         }
       }
 
+      const generateMode = refs.tasktype.value === 'images' ? 'images' : settings.fastDownload ? 'fast' : 'final';
       // Script fallback
       const script = generateScript(
         rows,
-        settings.fastDownload ? 'fast' : 'final',
+        generateMode,
         settings.fastDownload ? settings.fastDownloadQuality : 'n/a',
         failures,
         settings.dryRun
@@ -415,6 +427,8 @@ async function runOnce() {
     opActive = false; hidePanelProgress(refs); clearMiniBadge(refs);
   } finally {
     refs.runBtn.disabled = false;
+    refs.tasktype.disabled = false;
+    refs.settingsBtn.disabled = false;
     updateRunLabel();
     refs.launch.title = 'Open Sora Batch Downloader';
     refs.ring.style.animation = '';
@@ -427,15 +441,16 @@ async function runOnce() {
 // ---------- helpers ----------
 function generateScript(
   downloadRows: {id:string,url:string,filename:string}[],
-  mode: 'fast'|'final',
+  mode: 'fast'|'final'|'images',
   quality: string,
   failures: {id:string,reason:string}[],
   dryRun: boolean
 ) {
+  const tasktypeDesc = mode === 'images' ? "Images" : mode === 'fast' ? `Fast Download (Watermarked, ${quality})` : "Final Quality (No Watermark)";
   const hdr = [
     '#!/bin/bash',
-    `# Download script for ${downloadRows.length} Sora videos`,
-    `# Mode: ${mode === 'fast' ? `Fast Download (Watermarked, ${quality})` : 'Final Quality (No Watermark)'}`,
+    `# Download script for ${downloadRows.length} Sora ${mode === 'images' ? 'images' : 'videos'}`,
+    `# Mode: ${tasktypeDesc}`,
     `# Format: curl`,
     `# Generated: ${new Date().toISOString()}`,
     ``
@@ -447,10 +462,13 @@ function generateScript(
     blocks.push('');
   }
   if (!downloadRows.length) return [...hdr, ...blocks, '# No videos to download.'].join('\n');
-  blocks.push(`echo "Starting download of ${downloadRows.length} videos..."`, ``);
+  blocks.push(`echo "Starting download of ${downloadRows.length} ${mode === 'images' ? 'images' : 'videos'}..."`, ``);
   const cmdPrefix = dryRun ? '# ' : '';
   for (const row of downloadRows) {
-    const fname = `sora_${row.id}.mp4`;
+    let fname = `sora_${row.id}.mp4`;
+    if (refs.tasktype.value === 'images') {
+      fname = `sora_${row.id}.png`;
+    }
     blocks.push(`${cmdPrefix}curl -L -C - --fail --retry 5 --retry-delay 2 -o "${fname}" "${row.url.replace(/"/g,'\\"')}"`);
   }
   blocks.push(``, `echo "Download completed!"`);

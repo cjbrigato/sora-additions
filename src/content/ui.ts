@@ -5,7 +5,8 @@ export type UIRefs = {
     // panel
     panel: HTMLElement; hdrClose: HTMLElement; btnSettings: HTMLButtonElement;
     awaitBox: HTMLElement; appBox: HTMLElement;
-    runBtn: HTMLButtonElement; stopBtn: HTMLButtonElement; copyBtn: HTMLButtonElement; exportBtn: HTMLButtonElement;
+    tasktype: HTMLSelectElement;
+    runBtn: HTMLButtonElement; stopBtn: HTMLButtonElement; copyBtn: HTMLButtonElement; exportBtn: HTMLButtonElement;settingsBtn: HTMLButtonElement;
     status: HTMLElement; out: HTMLTextAreaElement;
     // HUD
     hudWrap: HTMLElement; hudRing: HTMLElement; hudMain: HTMLElement; hudSub: HTMLElement;
@@ -46,7 +47,9 @@ export async function buildUI(): Promise<UIRefs> {
         launch: $('launch'), ring: $('ring'), badge: $('badge'),
         panel: $('panel'), hdrClose: $('close') as HTMLElement, btnSettings: $('btn-settings') as HTMLButtonElement,
         awaitBox: $('await'), appBox: $('app'),
+        tasktype: $('tasktype') as HTMLSelectElement,
         runBtn: $('run') as HTMLButtonElement, stopBtn: $('stop') as HTMLButtonElement, copyBtn: $('copy') as HTMLButtonElement, exportBtn: $('export') as HTMLButtonElement,
+        settingsBtn: $('btn-settings') as HTMLButtonElement,
         status: $('status'), out: $('out') as HTMLTextAreaElement,
         hudWrap: $('hud'), hudRing: $('hud-ring'), hudMain: $('hud-main'), hudSub: $('hud-sub'),
         settings: $('settings'),
