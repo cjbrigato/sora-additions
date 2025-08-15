@@ -123,7 +123,8 @@
         color: #eee;
         border: 1px solid #444;
         border-radius: 12px;
-        padding: 10px; /*was 12px*/
+        padding: 10px;
+        /*was 12px*/
         z-index: 2147483647;
         overflow: hidden;
         font: 13px/1.45 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
@@ -388,6 +389,33 @@
         border-color: rgba(0, 0, 0, .25) transparent transparent transparent;
         pointer-events: none;
     }
+
+    .tooltip-container {
+        position: relative;
+        display: inline-block;
+    }
+
+    .tooltip-trigger {
+        cursor: pointer;
+        font-size: 12px;
+        color: #aaa;
+    }
+
+    .tooltip-text {
+        position: absolute;
+        background: #111;
+        color: #eee;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        z-index: 1000;
+        white-space: nowrap;
+        display: none;
+    }
+
+    .tooltip-container:hover .tooltip-text {
+        display: block;
+    }
 </style>
 
 <div id="launch" title="Open Sora Batch Downloader">
@@ -441,17 +469,32 @@
     <div id="settings">
         <div class="rows">
             <div class="rowc group">
-                <label>Download Mode:</label>
+                <label>Videos settings</label>
+            </div>
+            <div class="rowc">
                 <div>
-                    <label><input type="radio" id="mode-final" name="mode" value="final"> Final Quality (no
+                    <label>D/L Mode:</label>
+                    <div class="sub tooltip-container">
+                        <span class="tooltip-trigger" tabindex="0" aria-label="Info">[?]</span>
+                        <span class="tooltip-text">Final HD availability depends on your plan.</span>
+                    </div>
+                </div>
+                <div>
+                    <label><input type="radio" id="mode-final" name="mode" value="final"> Final HD (no
                         watermark)</label>
                     <label style="margin-left:16px;"><input type="radio" id="mode-fast" name="mode" value="fast">
-                        Fast Download (with watermark)</label>
+                        Fast (watermarked)</label>
                 </div>
             </div>
 
             <div id="fastq-row" class="rowc">
-                <label for="fastq">Fast Quality:</label>
+                <div>
+                    <label for="fastq">Fast Quality:</label>
+                    <div class="sub tooltip-container">
+                        <span class="tooltip-trigger" tabindex="0" aria-label="Info">[?]</span>
+                        <span class="tooltip-text">Always watermarked.</span>
+                    </div>
+                </div>
                 <select id="fastq">
                     <option value="source">Source (HD)</option>
                     <option value="md">Medium</option>
@@ -460,17 +503,39 @@
             </div>
 
             <div id="parallel-row" class="rowc">
-                <label for="parallel">Parallel RAW requests:</label>
+                <div>
+                    <label for="parallel">Parallel RAW requests:</label>
+                    <div class="sub tooltip-container">
+                        <span class="tooltip-trigger" tabindex="0" aria-label="Info">[?]</span>
+                        <span class="tooltip-text">Max 20. Only relevant for Final HD.</span>
+                    </div>
+                </div>
                 <input type="number" id="parallel" min="1" max="20">
             </div>
 
+            <div class="rowc group">
+                <label>Common settings</label>
+            </div>
+
             <div id="limit-row" class="rowc">
-                <label for="limit">List limit (max 100):</label>
+                <div>
+                    <label for="limit">List limit:</label>
+                    <div class="sub tooltip-container">
+                        <span class="tooltip-trigger" tabindex="0" aria-label="Info">[?]</span>
+                        <span class="tooltip-text">Max 100, only when direct download is disabled.</span>
+                    </div>
+                </div>
                 <input type="number" id="limit" min="1" max="100">
             </div>
 
             <div class="rowc">
-                <label for="dry">Dry-run (comment out curls)</label>
+                <div>
+                    <label for="dry">Dry-run script</label>
+                    <div class="sub tooltip-container">
+                        <span class="tooltip-trigger" tabindex="0" aria-label="Info">[?]</span>
+                        <span class="tooltip-text">Prints curl commands instead of executing them.</span>
+                    </div>
+                </div>
                 <input type="checkbox" id="dry">
             </div>
 

@@ -430,6 +430,7 @@ async function runOnce() {
     refs.tasktype.disabled = false;
     refs.settingsBtn.disabled = false;
     updateRunLabel();
+    hidePanelProgress(refs); clearMiniBadge(refs);
     refs.launch.title = 'Open Sora Batch Downloader';
     refs.ring.style.animation = '';
     // leave ring fill as-is if 100% just happened; else clear
@@ -463,13 +464,19 @@ function generateScript(
   }
   if (!downloadRows.length) return [...hdr, ...blocks, '# No videos to download.'].join('\n');
   blocks.push(`echo "Starting download of ${downloadRows.length} ${mode === 'images' ? 'images' : 'videos'}..."`, ``);
-  const cmdPrefix = dryRun ? '# ' : '';
+  if (dryRun) {
+    blocks.push(`echo "Dry run, skipping download, printing curl commands instead..."`);
+    blocks.push(`cat << 'EOF'`);
+  }
   for (const row of downloadRows) {
     let fname = `sora_${row.id}.mp4`;
     if (refs.tasktype.value === 'images') {
       fname = `sora_${row.id}.png`;
     }
-    blocks.push(`${cmdPrefix}curl -L -C - --fail --retry 5 --retry-delay 2 -o "${fname}" "${row.url.replace(/"/g,'\\"')}"`);
+    blocks.push(`curl -L -C - --fail --retry 5 --retry-delay 2 -o "${fname}" "${row.url.replace(/"/g,'\\"')}"`);
+  }
+  if (dryRun) {
+    blocks.push(`EOF`);
   }
   blocks.push(``, `echo "Download completed!"`);
   return [...hdr, ...blocks].join('\n');
