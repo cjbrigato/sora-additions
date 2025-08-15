@@ -28,6 +28,7 @@ let isReady = false;
 let directRunning = false;
 let opActive = false;
 let currentAbort: AbortController | null = null;
+let settingsOpen = false; // avoid overwriting inputs while editing
 
 // ---------- Inject bearer hook ----------
 (function injectHook() {
@@ -59,102 +60,18 @@ window.addEventListener('load', async () => {
   updateRunLabel();
 });
 
-// ---------- UI wiring ----------
-function wireUI() {
-  // radios
-  refs.modeFinal?.addEventListener('change', () => toggleFast(false));
-  refs.modeFast ?.addEventListener('change', () => toggleFast(true));
-
-  // open / close
-  refs.launch?.addEventListener('click', () => {
-    refs.panel.style.display = 'flex';
-    (refs.launch as HTMLElement).style.display = 'none';
-    clearMiniBadge(refs);
-    isReady ? renderAppView() : renderNoTokenView();
-  });
-  refs.hdrClose?.addEventListener('click', () => {
-    refs.panel.style.display = 'none';
-    (refs.launch as HTMLElement).style.display = 'flex';
-    // re-évalue le badge si une op est en cours
-    setMiniBadge(refs, refs.badge.textContent || '', undefined);
-  });
-
-  // settings open/close
-  refs.btnSettings?.addEventListener('click', () => {
-    populateSettings();
-    refs.settings.style.display = 'block';
-  });
-  // le X de fermeture dans le panel settings (existe dans le markup ui.ts)
-  refs.root.getElementById('sora-settings-close-button')
-    ?.addEventListener('click', () => { refs.settings.style.display = 'none'; });
-
-  // save settings
-  refs.btnSave?.addEventListener('click', async () => {
-    settings.workers             = clampInt(refs.parallel?.value, 1, 20, DEFAULT_SETTINGS.workers);
-    settings.fastDownload        = !!refs.modeFast?.checked;
-    settings.fastDownloadQuality = (refs.fastq?.value as any) || settings.fastDownloadQuality;
-    settings.limit               = clampInt(refs.limit?.value, 1, DEFAULT_LIMIT, DEFAULT_SETTINGS.limit);
-    settings.dryRun              = !!refs.dry?.checked;
-
-    settings.directDownload = !!refs.direct?.checked;
-    settings.directMaxTasks = clampInt(refs.maxTasks?.value, 1, 100, DEFAULT_SETTINGS.directMaxTasks);
-    settings.directParallel = clampInt(refs.dParallel?.value, 1, 6, DEFAULT_SETTINGS.directParallel);
-    settings.directSaveAs   = !!refs.saveAs?.checked;
-    settings.directZip      = !!refs.zip?.checked;
-
-    await saveSettings(settings);
-    refs.settings.style.display = 'none';
-    updateRunLabel();
-  });
-
-  // copy script
-  refs.copyBtn?.addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(refs.out.value); }
-    catch {
-      const sel = document.getSelection(); const r = document.createRange();
-      r.selectNodeContents(refs.out); sel?.removeAllRanges(); sel?.addRange(r);
-      document.execCommand('copy'); sel?.removeAllRanges();
-    }
-    refs.copyBtn.textContent = 'Copied!';
-    setTimeout(() => refs.copyBtn.textContent = 'Copy Script', 1500);
-  });
-
-  // stop
-  refs.stopBtn?.addEventListener('click', async () => {
-    try { await send({ type: 'CANCEL_DIRECT_DOWNLOAD' }); } catch {}
-    try { currentAbort?.abort(); } catch {}
-    opActive = false;
-    hidePanelProgress(refs);
-    clearMiniBadge(refs);
-    directRunning = false;
-    updateRunLabel();
-  });
-
-  // run
-  refs.runBtn?.addEventListener('click', runOnce);
-
-  // background progress relay
-  chrome.runtime.onMessage.addListener((msg: any) => {
-    if (msg?.type !== 'DIRECT_PROGRESS') return;
-    const { phase } = msg;
-    if (phase === 'start') refs.status.textContent = `Direct: queued ${msg.total} item(s)…`;
-    else if (phase === 'progress') {
-      const p = msg.totalBytes ? Math.round((msg.bytesReceived / msg.totalBytes) * 100) : null;
-      refs.status.textContent = `Direct: downloading ${msg.file}${p!=null?' ('+p+'%)':''}`;
-    } else if (phase === 'item') {
-      const base = `Direct: ${msg.state} — ${msg.file}`;
-      refs.status.textContent = (typeof msg.done === 'number' && typeof msg.total === 'number')
-        ? `${base} (${msg.done}/${msg.total})` : base;
-    } else if (phase === 'cancel_start') {
-      refs.status.textContent = 'Direct: cancel requested…';
-    } else if (phase === 'cancel_done' || phase === 'done') {
-      refs.status.textContent = `Direct: completed ${msg.done ?? ''}${msg.total ? '/' + msg.total : ''}`;
-      directRunning = false; updateRunLabel();
-    }
-  });
+// ---------- UI helpers ----------
+function setLauncherPct(p?: number) {
+  if (typeof p === 'number') {
+    const v = Math.max(0, Math.min(100, p));
+    refs.ring.style.backgroundImage = `conic-gradient(#0d6efd ${v}%, #444 ${v}%)`;
+  } else {
+    refs.ring.style.backgroundImage = '';
+    refs.ring.style.border = '2px solid #444';
+    refs.ring.style.borderTopColor = '#0d6efd';
+  }
 }
 
-// ---------- View helpers (single implementations) ----------
 function renderNoTokenView() {
   refs.awaitBox.style.display = 'flex';
   refs.appBox.style.display = 'none';
@@ -174,7 +91,7 @@ function updateSettingsUI() {
   const canNoWM = !!userCaps?.can_download_without_watermark;
   if (!canNoWM) { refs.modeFinal && (refs.modeFinal.disabled = true); settings.fastDownload = true; }
   else          { refs.modeFinal && (refs.modeFinal.disabled = false); }
-  populateSettings();
+  if (!settingsOpen) populateSettings();
   updateRunLabel();
 }
 
@@ -214,6 +131,103 @@ function updateRunLabel() {
   refs.stopBtn.style.display = directRunning ? 'inline-block' : 'none';
 }
 
+// ---------- Wiring ----------
+function wireUI() {
+  // radios
+  refs.modeFinal?.addEventListener('change', () => toggleFast(false));
+  refs.modeFast ?.addEventListener('change', () => toggleFast(true));
+
+  // open / close
+  refs.launch?.addEventListener('click', () => {
+    refs.panel.style.display = 'flex';
+    (refs.launch as HTMLElement).style.display = 'none';
+    clearMiniBadge(refs);
+    isReady ? renderAppView() : renderNoTokenView();
+  });
+  refs.hdrClose?.addEventListener('click', () => {
+    refs.panel.style.display = 'none';
+    (refs.launch as HTMLElement).style.display = 'flex';
+    setMiniBadge(refs, refs.badge.textContent || '', undefined);
+  });
+
+  // settings open/close
+  refs.btnSettings?.addEventListener('click', () => {
+    settingsOpen = true;
+    populateSettings();
+    refs.settings.style.display = 'block';
+  });
+  refs.root.getElementById('sora-settings-close-button')
+    ?.addEventListener('click', () => { refs.settings.style.display = 'none'; settingsOpen = false; });
+
+  // save settings
+  refs.btnSave?.addEventListener('click', async () => {
+    settings.workers             = clampInt(refs.parallel?.value, 1, 20, DEFAULT_SETTINGS.workers);
+    settings.fastDownload        = !!refs.modeFast?.checked;
+    settings.fastDownloadQuality = (refs.fastq?.value as any) || settings.fastDownloadQuality;
+    settings.limit               = clampInt(refs.limit?.value, 1, DEFAULT_LIMIT, DEFAULT_SETTINGS.limit);
+    settings.dryRun              = !!refs.dry?.checked;
+
+    settings.directDownload = !!refs.direct?.checked;
+    settings.directMaxTasks = clampInt(refs.maxTasks?.value, 1, 100, DEFAULT_SETTINGS.directMaxTasks);
+    settings.directParallel = clampInt(refs.dParallel?.value, 1, 6, DEFAULT_SETTINGS.directParallel);
+    settings.directSaveAs   = !!refs.saveAs?.checked;
+    settings.directZip      = !!refs.zip?.checked;
+
+    await saveSettings(settings);
+    refs.settings.style.display = 'none';
+    settingsOpen = false;
+    updateRunLabel();
+  });
+
+  // copy script
+  refs.copyBtn?.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(refs.out.value); }
+    catch {
+      const sel = document.getSelection(); const r = document.createRange();
+      r.selectNodeContents(refs.out); sel?.removeAllRanges(); sel?.addRange(r);
+      document.execCommand('copy'); sel?.removeAllRanges();
+    }
+    refs.copyBtn.textContent = 'Copied!';
+    setTimeout(() => refs.copyBtn.textContent = 'Copy Script', 1500);
+  });
+
+  // stop
+  refs.stopBtn?.addEventListener('click', async () => {
+    try { await send({ type: 'CANCEL_DIRECT_DOWNLOAD' }); } catch {}
+    try { currentAbort?.abort(); } catch {}
+    opActive = false;
+    hidePanelProgress(refs);
+    clearMiniBadge(refs);
+    directRunning = false;
+    updateRunLabel();
+    setLauncherPct(undefined);
+  });
+
+  // run
+  refs.runBtn?.addEventListener('click', runOnce);
+
+  // background progress relay
+  chrome.runtime.onMessage.addListener((msg: any) => {
+    if (msg?.type !== 'DIRECT_PROGRESS') return;
+    const { phase } = msg;
+    if (phase === 'start') refs.status.textContent = `Direct: queued ${msg.total} item(s)…`;
+    else if (phase === 'progress') {
+      const p = msg.totalBytes ? Math.round((msg.bytesReceived / msg.totalBytes) * 100) : null;
+      refs.status.textContent = `Direct: downloading ${msg.file}${p!=null?' ('+p+'%)':''}`;
+    } else if (phase === 'item') {
+      const base = `Direct: ${msg.state} — ${msg.file}`;
+      refs.status.textContent = (typeof msg.done === 'number' && typeof msg.total === 'number')
+        ? `${base} (${msg.done}/${msg.total})` : base;
+    } else if (phase === 'cancel_start') {
+      refs.status.textContent = 'Direct: cancel requested…';
+    } else if (phase === 'cancel_done' || phase === 'done') {
+      refs.status.textContent = `Direct: completed ${msg.done ?? ''}${msg.total ? '/' + msg.total : ''}`;
+      directRunning = false; updateRunLabel();
+      setLauncherPct(undefined);
+    }
+  });
+}
+
 // ---------- Run flow ----------
 async function runOnce() {
   refs.runBtn.disabled = true;
@@ -222,8 +236,10 @@ async function runOnce() {
   refs.out.value = '';
   refs.runBtn.textContent = 'In progress...';
 
+  // launcher visual
   refs.ring.style.animation = 'spin 1.2s linear infinite';
   refs.ring.style.border = '3px solid transparent';
+  setLauncherPct(0);
 
   try {
     const listLimit = settings.directDownload ? settings.directMaxTasks : settings.limit;
@@ -234,7 +250,7 @@ async function runOnce() {
     if (!resList?.ok) throw new Error(resList?.error || 'List fetch failed');
     const tasks: Task[] = Array.isArray(resList.json?.task_responses) ? resList.json.task_responses : [];
 
-    const { valid, skipped } = filterGenerations(tasks);
+    const { valid } = filterGenerations(tasks);
     const validTasksCount = countValidTasks(tasks);
     refs.status.textContent = `${valid.length} valid generations found.`;
 
@@ -248,13 +264,33 @@ async function runOnce() {
           const q = settings.fastDownloadQuality;
           const url = (gen.encodings as any)?.[q]?.path || (gen as any)?.url
             || gen?.encodings?.source?.path || gen?.encodings?.md?.path || gen?.encodings?.ld?.path || null;
-        return url ? { id: gen.id, url, filename: `sora_${gen.id}.mp4` } : null as any;
+          return url ? { id: gen.id, url, filename: `sora_${gen.id}.mp4` } : null as any;
         }).filter(Boolean);
+        // step instantly “complete” → show 100%
+        setPanelProgress(refs, 100, 'Extracted URLs', '');
+        setLauncherPct(100);
       } else {
         refs.status.textContent = 'Step 2/3: Fetching URLs...';
+        // Show HUD + mini badge during /raw
+        setPanelProgress(refs, 0, 'Fetching URLs (0/0)', '');
+        setMiniBadge(refs, `URL 0/0`, 'dl');
+
         const ids = valid.map(g => g.id);
         const { successes, failures: f } =
-          await fetchRawWithConcurrency(ids, settings.workers, (t,p)=> { refs.launch.title = t; }, send);
+          await fetchRawWithConcurrency(ids, settings.workers, (text, pct) => {
+            // Parse "(x/y)" to display counts
+            const m = /(\d+)\s*\/\s*(\d+)\)/.exec(text);
+            if (m) {
+              const x = Number(m[1]), y = Number(m[2]);
+              setPanelProgress(refs, pct, `Fetching URLs (${x}/${y})`, '');
+              setMiniBadge(refs, `URL ${x}/${y}`, 'dl');
+              setLauncherPct(pct);
+            } else {
+              setPanelProgress(refs, pct, 'Fetching URLs', '');
+              setLauncherPct(pct);
+            }
+          }, send);
+
         rows = successes.map(s => ({ id: s.id, url: s.url, filename: `sora_${s.id}.mp4` }));
         failures = f;
       }
@@ -273,12 +309,16 @@ async function runOnce() {
             signal: acDL.signal,
             onStatus: ({phase, file, index, total}) => {
               if (phase === 'dl-progress') {
-                setPanelProgress(refs, (index-1)/total*100, `Downloading ${index}/${total}`, file);
+                const pct = ((index - 1) / total) * 100;
+                setPanelProgress(refs, pct, `Downloading ${index}/${total}`, file);
                 setMiniBadge(refs, `DL ${index}/${total}`, 'dl');
+                setLauncherPct(pct);
               }
               if (phase === 'dl-file-done') {
-                setPanelProgress(refs, index/total*100, `Downloaded ${index}/${total}`, file);
+                const pct = (index / total) * 100;
+                setPanelProgress(refs, pct, `Downloaded ${index}/${total}`, file);
                 setMiniBadge(refs, `DL ${index}/${total}`, 'dl');
+                setLauncherPct(pct);
               }
             }
           });
@@ -301,12 +341,15 @@ async function runOnce() {
                 setMiniBadge(refs, `ZIP ${Number(done||0)+1}/${total}`, 'zip');
               }
               if (phase === 'zip-file-done') {
-                setPanelProgress(refs, (Number(done||0)/Number(total||1))*100, `Zipped ${done}/${total}`, file);
+                const pct = (Number(done||0) / Number(total||1)) * 100;
+                setPanelProgress(refs, pct, `Zipped ${done}/${total}`, file);
                 setMiniBadge(refs, `ZIP ${done}/${total}`, 'zip');
+                setLauncherPct(pct);
               }
               if (phase === 'zip-done') {
                 setPanelProgress(refs, 100, `ZIP completed (${total} files)`, '');
                 clearMiniBadge(refs);
+                setLauncherPct(100);
               }
               if (phase === 'cancel_done') {
                 hidePanelProgress(refs); clearMiniBadge(refs);
@@ -314,7 +357,7 @@ async function runOnce() {
             }
           });
 
-          // final download
+          // final browser download
           const zipFile = await (await dir.getFileHandle(zipName)).getFile();
           const blobUrl = URL.createObjectURL(zipFile);
           const a = document.createElement('a');
@@ -327,6 +370,7 @@ async function runOnce() {
           currentAbort = null;
           directRunning = false; updateRunLabel();
           opActive = false; hidePanelProgress(refs); clearMiniBadge(refs);
+          setLauncherPct(undefined);
 
         } else {
           // Direct via chrome.downloads
@@ -336,8 +380,13 @@ async function runOnce() {
       }
 
       // Script fallback
-      const script = generateScript(rows, settings.fastDownload ? 'fast' : 'final',
-        settings.fastDownload ? settings.fastDownloadQuality : 'n/a', failures, settings.dryRun);
+      const script = generateScript(
+        rows,
+        settings.fastDownload ? 'fast' : 'final',
+        settings.fastDownload ? settings.fastDownloadQuality : 'n/a',
+        failures,
+        settings.dryRun
+      );
       refs.out.value = script;
 
       let finalStatus = `Done! Script for ${rows.length} videos.`;
@@ -357,14 +406,13 @@ async function runOnce() {
     refs.status.textContent = `ERROR: ${err.message || err}`;
     refs.out.value = `An error occurred.\n\n${err.stack || String(err)}`;
     opActive = false; hidePanelProgress(refs); clearMiniBadge(refs);
-
   } finally {
     refs.runBtn.disabled = false;
     updateRunLabel();
     refs.launch.title = 'Open Sora Batch Downloader';
     refs.ring.style.animation = '';
-    refs.ring.style.backgroundImage = '';
-    refs.ring.style.border = '2px solid #444';
+    // leave ring fill as-is if 100% just happened; else clear
+    setLauncherPct(undefined);
     currentAbort = null;
   }
 }

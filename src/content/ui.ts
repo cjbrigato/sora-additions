@@ -18,42 +18,48 @@ export type UIRefs = {
     dry?: HTMLInputElement;
     direct?: HTMLInputElement; maxTasks?: HTMLInputElement; dParallel?: HTMLInputElement; saveAs?: HTMLInputElement; zip?: HTMLInputElement;
     btnSave?: HTMLButtonElement;
-  };
-  
-  export function buildUI(): UIRefs {
+};
+
+export function buildUI(): UIRefs {
     const host = document.createElement('div');
     host.style.all = 'initial';
     document.body.appendChild(host);
     const root = host.attachShadow({ mode: 'open' });
-  
+
     root.innerHTML = `
       <style>
         :host, *, *::before, *::after { box-sizing: border-box; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
   
         /* Buttons — glossy */
-        .btn{
-          display:inline-flex; align-items:center; gap:8px;
-          background: linear-gradient(180deg,#2d7dff 0%,#0d6efd 100%);
-          color:#fff; border:none; padding:8px 12px; border-radius:10px; cursor:pointer;
-          box-shadow:0 4px 14px rgba(13,110,253,.35), inset 0 1px 0 rgba(255,255,255,.15);
-          transition:transform .06s ease, filter .15s ease;
-        }
-        .btn:hover{ filter:brightness(1.05); transform:translateY(-1px); }
-        .btn:active{ transform:translateY(0); }
-        .btn.secondary{
-          background:#2c2c2f; color:#e6e6ea; border:1px solid #3a3a40;
-          box-shadow:0 2px 10px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.05);
-        }
-        .btn.danger{
-          background: linear-gradient(180deg,#d65454 0%,#a33 100%); color:#fff;
-          box-shadow:0 4px 14px rgba(183,60,60,.35), inset 0 1px 0 rgba(255,255,255,.12);
-        }
-        .btn.ghost{
-          background:transparent; color:#cfcfd7; border:1px solid #3a3a40;
-          box-shadow:inset 0 1px 0 rgba(255,255,255,.05);
-        }
-        .btn svg{ width:16px; height:16px; opacity:.95 }
+.btn{
+  display:inline-flex; align-items:center; gap:8px;
+  background: linear-gradient(180deg,#2d7dff 0%,#0d6efd 100%);
+  color:#fff; border:none; padding:8px 12px; border-radius:10px; cursor:pointer;
+  box-shadow:0 4px 14px rgba(13,110,253,.35), inset 0 1px 0 rgba(255,255,255,.15);
+  transition:transform .06s ease, filter .15s ease;
+}
+.btn:hover{ filter:brightness(1.05); transform:translateY(-1px); }
+.btn:active{ transform:translateY(0); }
+
+.btn.secondary{
+  background:#2c2c2f; color:#e6e6ea; border:1px solid #3a3a40;
+  box-shadow:0 2px 10px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.05);
+}
+
+.btn.danger{
+  background: linear-gradient(180deg,#d65454 0%,#a33 100%); color:#fff;
+  box-shadow:0 4px 14px rgba(183,60,60,.35), inset 0 1px 0 rgba(255,255,255,.12);
+}
+
+/* Header "ghost" Settings */
+.btn.ghost{
+  background:rgba(255,255,255,0.02);
+  color:#cfcfd7; border:1px solid #3a3a40; border-radius:12px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.06);
+}
+.btn.ghost:hover{ filter:none; transform:none; border-color:#4a4a50; color:#f0f0f3; }
+.btn svg{ width:16px; height:16px; opacity:.95 }
   
         #launch{
           position: fixed; right: 18px; bottom: 18px; width: 56px; height: 56px;
@@ -208,25 +214,24 @@ export type UIRefs = {
   
       <div id="badge"></div>
     `;
-  
+
     const $ = (id: string) => root.getElementById(id)!;
-  
+
     return {
-      root,
-      launch: $('launch'), ring: $('ring'), badge: $('badge'),
-      panel: $('panel'), hdrClose: $('close') as HTMLElement, btnSettings: $('btn-settings') as HTMLButtonElement,
-      awaitBox: $('await'), appBox: $('app'),
-      runBtn: $('run') as HTMLButtonElement, stopBtn: $('stop') as HTMLButtonElement, copyBtn: $('copy') as HTMLButtonElement, exportBtn: $('export') as HTMLButtonElement,
-      status: $('status'), out: $('out') as HTMLTextAreaElement,
-      hudWrap: $('hud'), hudRing: $('hud-ring'), hudMain: $('hud-main'), hudSub: $('hud-sub'),
-      settings: $('settings'),
-      modeFinal: $('mode-final') as HTMLInputElement, modeFast: $('mode-fast') as HTMLInputElement,
-      fastqRow: $('fastq-row'), fastq: $('fastq') as HTMLSelectElement,
-      parallelRow: $('parallel-row'), parallel: $('parallel') as HTMLInputElement,
-      limitRow: $('limit-row'), limit: $('limit') as HTMLInputElement,
-      dry: $('dry') as HTMLInputElement,
-      direct: $('direct') as HTMLInputElement, maxTasks: $('maxTasks') as HTMLInputElement, dParallel: $('dParallel') as HTMLInputElement, saveAs: $('saveAs') as HTMLInputElement, zip: $('zip') as HTMLInputElement,
-      btnSave: $('btn-save') as HTMLButtonElement
+        root,
+        launch: $('launch'), ring: $('ring'), badge: $('badge'),
+        panel: $('panel'), hdrClose: $('close') as HTMLElement, btnSettings: $('btn-settings') as HTMLButtonElement,
+        awaitBox: $('await'), appBox: $('app'),
+        runBtn: $('run') as HTMLButtonElement, stopBtn: $('stop') as HTMLButtonElement, copyBtn: $('copy') as HTMLButtonElement, exportBtn: $('export') as HTMLButtonElement,
+        status: $('status'), out: $('out') as HTMLTextAreaElement,
+        hudWrap: $('hud'), hudRing: $('hud-ring'), hudMain: $('hud-main'), hudSub: $('hud-sub'),
+        settings: $('settings'),
+        modeFinal: $('mode-final') as HTMLInputElement, modeFast: $('mode-fast') as HTMLInputElement,
+        fastqRow: $('fastq-row'), fastq: $('fastq') as HTMLSelectElement,
+        parallelRow: $('parallel-row'), parallel: $('parallel') as HTMLInputElement,
+        limitRow: $('limit-row'), limit: $('limit') as HTMLInputElement,
+        dry: $('dry') as HTMLInputElement,
+        direct: $('direct') as HTMLInputElement, maxTasks: $('maxTasks') as HTMLInputElement, dParallel: $('dParallel') as HTMLInputElement, saveAs: $('saveAs') as HTMLInputElement, zip: $('zip') as HTMLInputElement,
+        btnSave: $('btn-save') as HTMLButtonElement
     };
-  }
-  
+}
