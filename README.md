@@ -5,6 +5,8 @@ Chrome extension that plugs **directly** into Sora’s UI to help you retrieve y
 ## In Action
 <img width="584" height="380" alt="image" src="https://github.com/user-attachments/assets/15437475-4b86-468c-9961-2a45f922b96c" />
 <img width="572" height="514" alt="image" src="https://github.com/user-attachments/assets/39efb106-6ef7-46c8-97c2-846aae5bb028" />
+<img width="352" height="166" alt="image" src="https://github.com/user-attachments/assets/c023b8d8-c021-4a6f-ab06-bb39bd5817c8" />
+
 
 ## Features
 * Supports **images** and **videos** batch download
