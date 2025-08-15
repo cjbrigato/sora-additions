@@ -6,6 +6,7 @@ Chrome extension that plugs **directly** into Sora’s UI to help you retrieve y
 <img width="456" height="303" alt="image" src="https://github.com/user-attachments/assets/15437475-4b86-468c-9961-2a45f922b96c" />
 <img width="440" height="395" alt="image" src="https://github.com/user-attachments/assets/39efb106-6ef7-46c8-97c2-846aae5bb028" />
 <img width="453" height="135" alt="image" src="https://github.com/user-attachments/assets/6c9c985c-1e82-47f2-8ccc-8328669b3d1c" />
+<img width="454" height="124" alt="image" src="https://github.com/user-attachments/assets/e789670b-9ca0-482a-81ec-a8f3264e07e2" />
 
 
 ## Features
