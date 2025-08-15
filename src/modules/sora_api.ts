@@ -1,13 +1,13 @@
-export type Gen = { id: string; encodings?: { source?: {path?:string}, md?:{path?:string}, ld?:{path?:string} }, url?: string, task_id?: string };
-export type Task = { id: string; status: string; generations?: Gen[]; failure_reason?: string; moderation_result?: {is_output_rejection?: boolean} };
+import * as SoraTypes from './sora_types'
 
 export type GenMinimalSubset = {id:string,task_id:string}
-export type FilterGenerationsResult = {valid: Gen[], skipped: {id?:string, reason:string}[]}
+export type FilterGenerationsResult = {valid: SoraTypes.Generation[], skipped: {id?:string, reason:string}[]}
 export type SuccessfullRawResult = {id:string,task_id:string,url:string}
 export type FailedRawResult = {id:string,task_id:string,reason:string}
 export type FetchRawResult = {successes:SuccessfullRawResult[],failures:FailedRawResult[]}
 
-export function filterGenerations(tasks: Task[]):FilterGenerationsResult {
+
+export function filterGenerations(tasks: SoraTypes.Task[]):FilterGenerationsResult {
   const fileredResult:FilterGenerationsResult = {valid:[],skipped:[]}
   for (const t of (Array.isArray(tasks) ? tasks : [])) {
     if (t?.status !== 'succeeded') { fileredResult.skipped.push({ id:t?.id, reason:t?.failure_reason || 'Task not succeeded' }); continue; }
@@ -25,7 +25,7 @@ export function filterGenerations(tasks: Task[]):FilterGenerationsResult {
   return fileredResult;
 }
 
-export function countValidTasks(tasks: Task[]) {
+export function countValidTasks(tasks: SoraTypes.Task[]) {
   let count = 0;
   for (const t of (Array.isArray(tasks) ? tasks : [])) {
     if (t?.status !== 'succeeded') continue;

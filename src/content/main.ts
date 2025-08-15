@@ -9,11 +9,13 @@ import {
 } from '../modules/settings';
 import {
   filterGenerations, countValidTasks, fetchRawWithConcurrency,
-  type Task
 } from '../modules/sora_api';
 import {
   downloadAllToOPFS, writeZipFromOPFS, opfsRemoveDir, writeManifestsToOPFS, writeScriptToOPFS
 } from '../modules/zip_store';
+import * as SoraTypes from '../modules/sora_types'
+import * as BatchManifest from '../modules/manifest'
+
 
 // ---------- Messaging helper ----------
 type SendFn = (p: any) => Promise<any>;
@@ -26,6 +28,8 @@ let userCaps = { can_download_without_watermark: false };
 let isReady = false;
 let lastManifest = { rows: [], skipped: [], failures: [], mode: 'final', quality: 'source' } as { rows: { id: string; filename: string; url: string }[]; skipped: string[]; failures: { id: string; reason: string }[]; mode: string; quality: string };
 let lastScript = '';
+
+let lastBatchManifest: BatchManifest.Manifest = { csv: { rows: [], skipped: [], failures: [], mode: 'final', quality: 'source' }, json: { tasks: [], skipped: [], failures: [], mode: 'final', quality: 'source' } }
 
 let directRunning = false;
 let opActive = false;
@@ -281,7 +285,7 @@ async function runOnce() {
 
     const resList = await send({ type: 'FETCH_LIST', limit: listLimit, tasktype: refs.tasktype.value });
     if (!resList?.ok) throw new Error(resList?.error || 'List fetch failed');
-    const tasks: Task[] = Array.isArray(resList.json?.task_responses) ? resList.json.task_responses : [];
+    const tasks: SoraTypes.Task[] = Array.isArray(resList.json?.task_responses) ? resList.json.task_responses : [];
 
     const { valid } = filterGenerations(tasks);
     const validTasksCount = countValidTasks(tasks);
@@ -452,6 +456,7 @@ async function runOnce() {
       );
       refs.out.value = script;
       lastScript = script;
+
       lastManifest = generateManifest(rows, generateMode, settings.fastDownload ? settings.fastDownloadQuality : 'n/a', failures);
 
       let finalStatus = `Done! Script for ${rows.length} videos.`;
