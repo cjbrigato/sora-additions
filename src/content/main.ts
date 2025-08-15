@@ -295,7 +295,7 @@ async function runOnce() {
         refs.status.textContent = 'Step 2/3: Extracting URLs directly (Images mode)...';
         rows = valid.map((gen) => {
           const url = (gen.url || null);
-          return url ? { id: gen.id, url, filename: `sora_${gen.id}.png` } : null as any;
+          return url ? { id: gen.id, url, filename: `sora_${gen.task_id}_${gen.id}.png` } : null as any;
         }).filter(Boolean);
         setPanelProgress(refs, 100, 'Extracted URLs', '');
         setLauncherPct(100);
@@ -306,7 +306,7 @@ async function runOnce() {
           const q = settings.fastDownloadQuality;
           const url = (gen.encodings as any)?.[q]?.path || (gen as any)?.url
             || gen?.encodings?.source?.path || gen?.encodings?.md?.path || gen?.encodings?.ld?.path || null;
-          return url ? { id: gen.id, url, filename: `sora_${gen.id}.mp4` } : null as any;
+          return url ? { id: gen.id, url, filename: `sora_${gen.task_id}_${gen.id}.mp4` } : null as any;
         }).filter(Boolean);
         // step instantly “complete” → show 100%
         setPanelProgress(refs, 100, 'Extracted URLs', '');
@@ -333,7 +333,7 @@ async function runOnce() {
             }
           }, send);
 
-        rows = successes.map(s => ({ id: s.id, url: s.url, filename: `sora_${s.id}.mp4` }));
+        rows = successes.map(s => ({ id: s.id, url: s.url, filename: `sora_${s.task_id}_${s.id}.mp4` }));
         failures = f;
       }
 

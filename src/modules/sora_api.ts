@@ -1,4 +1,4 @@
-export type Gen = { id: string; encodings?: { source?: {path?:string}, md?:{path?:string}, ld?:{path?:string} }, url?: string };
+export type Gen = { id: string; encodings?: { source?: {path?:string}, md?:{path?:string}, ld?:{path?:string} }, url?: string, task_id?: string };
 export type Task = { id: string; status: string; generations?: Gen[]; failure_reason?: string; moderation_result?: {is_output_rejection?: boolean} };
 
 export function filterGenerations(tasks: Task[]) {
@@ -36,15 +36,15 @@ export async function fetchRawWithConcurrency(
   send: (p:any)=>Promise<any>
 ){
   const queue = ids.slice();
-  const successes: {id:string,url:string}[] = [], failures: {id:string,reason:string}[] = [];
+  const successes: {id:string,task_id:string,url:string}[] = [], failures: {id:string,task_id:string,reason:string}[] = [];
   let processed = 0, total = ids.length;
 
   async function worker() {
     while (queue.length) {
       const id = queue.shift()!;
       const res = await send({ type: 'FETCH_RAW_ONE', id });
-      if (res?.ok && res.url) successes.push({ id, url: res.url });
-      else failures.push({ id, reason: res?.error || 'Unknown error' });
+      if (res?.ok && res.url) successes.push({ id, task_id: res.task_id, url: res.url });
+      else failures.push({ id, task_id: res?.task_id, reason: res?.error || 'Unknown error' });
       processed++;
       onProgress(`Step 2/3: Fetching URLs (${processed}/${total})`, total ? (processed/total*100) : 0);
     }
