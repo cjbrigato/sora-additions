@@ -1,0 +1,232 @@
+export type UIRefs = {
+    root: ShadowRoot;
+    // launcher
+    launch: HTMLElement; ring: HTMLElement; badge: HTMLElement;
+    // panel
+    panel: HTMLElement; hdrClose: HTMLElement; btnSettings: HTMLButtonElement;
+    awaitBox: HTMLElement; appBox: HTMLElement;
+    runBtn: HTMLButtonElement; stopBtn: HTMLButtonElement; copyBtn: HTMLButtonElement; exportBtn: HTMLButtonElement;
+    status: HTMLElement; out: HTMLTextAreaElement;
+    // HUD
+    hudWrap: HTMLElement; hudRing: HTMLElement; hudMain: HTMLElement; hudSub: HTMLElement;
+    // settings
+    settings: HTMLElement;
+    modeFinal?: HTMLInputElement; modeFast?: HTMLInputElement;
+    fastqRow?: HTMLElement; fastq?: HTMLSelectElement;
+    parallelRow?: HTMLElement; parallel?: HTMLInputElement;
+    limitRow?: HTMLElement; limit?: HTMLInputElement;
+    dry?: HTMLInputElement;
+    direct?: HTMLInputElement; maxTasks?: HTMLInputElement; dParallel?: HTMLInputElement; saveAs?: HTMLInputElement; zip?: HTMLInputElement;
+    btnSave?: HTMLButtonElement;
+  };
+  
+  export function buildUI(): UIRefs {
+    const host = document.createElement('div');
+    host.style.all = 'initial';
+    document.body.appendChild(host);
+    const root = host.attachShadow({ mode: 'open' });
+  
+    root.innerHTML = `
+      <style>
+        :host, *, *::before, *::after { box-sizing: border-box; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  
+        /* Buttons — glossy */
+        .btn{
+          display:inline-flex; align-items:center; gap:8px;
+          background: linear-gradient(180deg,#2d7dff 0%,#0d6efd 100%);
+          color:#fff; border:none; padding:8px 12px; border-radius:10px; cursor:pointer;
+          box-shadow:0 4px 14px rgba(13,110,253,.35), inset 0 1px 0 rgba(255,255,255,.15);
+          transition:transform .06s ease, filter .15s ease;
+        }
+        .btn:hover{ filter:brightness(1.05); transform:translateY(-1px); }
+        .btn:active{ transform:translateY(0); }
+        .btn.secondary{
+          background:#2c2c2f; color:#e6e6ea; border:1px solid #3a3a40;
+          box-shadow:0 2px 10px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.05);
+        }
+        .btn.danger{
+          background: linear-gradient(180deg,#d65454 0%,#a33 100%); color:#fff;
+          box-shadow:0 4px 14px rgba(183,60,60,.35), inset 0 1px 0 rgba(255,255,255,.12);
+        }
+        .btn.ghost{
+          background:transparent; color:#cfcfd7; border:1px solid #3a3a40;
+          box-shadow:inset 0 1px 0 rgba(255,255,255,.05);
+        }
+        .btn svg{ width:16px; height:16px; opacity:.95 }
+  
+        #launch{
+          position: fixed; right: 18px; bottom: 18px; width: 56px; height: 56px;
+          border-radius: 50%; background:#111; color:#fff; display:flex; align-items:center; justify-content:center;
+          box-shadow:0 8px 24px rgba(0,0,0,.35); cursor:pointer; z-index: 2147483647; border:2px solid #444;
+        }
+        #ring{ position:absolute; inset:2px; border-radius:50%; }
+  
+        #panel{
+          position: fixed; right: 18px; bottom: 18px; width: 560px; max-height: 74vh;
+          display:none; flex-direction:column; gap:12px; background:#1e1e1e; color:#eee;
+          border:1px solid #444; border-radius:12px; padding:12px; z-index: 2147483647; overflow: hidden;
+          font:13px/1.45 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+          min-width: 0;
+        }
+        #hdr{ display:flex; align-items:center; justify-content:space-between; gap:8px; border-bottom:1px solid #333; padding-bottom:6px; }
+        #close{ cursor:pointer; font-size:22px; padding:4px 8px; }
+        #close:hover{ color:#f55; }
+  
+        #await{ display:flex; align-items:center; justify-content:center; flex-direction:column; gap:8px; min-height:120px; }
+        .spin{ width: 40px; height: 40px; border: 4px solid #444; border-top-color: #3a86ff; border-radius:50%; animation: spin 1s linear infinite; }
+        .sub { font-size:12px; color:#aaa; max-width:86%; text-align:center; }
+  
+        #app{ display:none; flex-direction:column; gap:10px; width:100%; min-width:0; }
+        #status{ font-size:13px; color:#bbb; }
+        #out{ display:block; width:100%; max-width:100%; height:200px; max-height:calc(70vh - 260px);
+              background:#0b0b0b; color:#b8ffb8; font: 13px ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+              border:1px solid #333; border-radius:10px; padding:10px; white-space:pre; overflow:auto; }
+        #out::-webkit-scrollbar{ width:10px; height:10px; }
+        #out::-webkit-scrollbar-thumb{ background:#3a3a3a; border-radius:8px; border:2px solid #0b0b0b; }
+  
+        /* settings panel */
+        #settings{ position:absolute; inset:12px; background:#1a1a1a; border:1px solid #333; border-radius:10px; padding:10px; display:none; overflow:auto; }
+        #settings::-webkit-scrollbar{ width:12px; }
+        #settings::-webkit-scrollbar-thumb{ background:#3a3a3a; border-radius:10px; border:2px solid #1a1a1a; }
+  
+        .rows { display:flex; flex-direction:column; gap:12px; }
+        .rowc { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+        .rowb { display:flex; flex-direction:column; align-items:flex-start; gap:8px; }
+        .group{ border-top:1px solid #333; padding-top:10px; margin-top:6px; }
+        input[type="number"], select{ background:#111; color:#eee; border:1px solid #444; border-radius:6px; padding:6px; min-width: 120px; }
+  
+        /* mini badge */
+        #badge{ position:fixed; right:18px; bottom:84px; padding:6px 10px; color:#fff; border-radius:999px; font-size:12px;
+                box-shadow:0 6px 18px rgba(0,0,0,.35); display:none; z-index:2147483647; user-select:none; background:#0d6efd; }
+        #badge.dl  { background:#0d6efd; }
+        #badge.zip { background:#8b5cf6; }
+  
+        /* HUD in panel */
+        #hud{ display:none; align-items:center; justify-content:center; flex-direction:column; gap:10px; padding:10px 0; min-height: 88px; }
+        .ringHud{ width:56px; height:56px; border-radius:50%;
+          background: conic-gradient(#0d6efd var(--pct,0%), #2e2e2e var(--pct,0%));
+          -webkit-mask: radial-gradient(circle 22px at 50% 50%, transparent 21px, black 22px);
+                  mask: radial-gradient(circle 22px at 50% 50%, transparent 21px, black 22px);
+          box-shadow: inset 0 0 0 2px #1d1d1d, 0 0 0 1px #0008; }
+        .mline{ color:#ddd; font-size:14px; text-align:center; }
+        .sline{ color:#aaa; font-size:12px; text-align:center; max-width:90%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      </style>
+  
+      <div id="launch" title="Open Sora Batch Downloader">
+        <div id="ring"></div>
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+          <path d="M12 4V16M12 16L8 12M12 16L16 12" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M4 20H20" stroke="white" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </div>
+  
+      <div id="panel">
+        <div id="hdr">
+          <button id="btn-settings" class="btn ghost" title="Settings">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M12 8.5a3.5 3.5 0 1 0 0 7a3.5 3.5 0 0 0 0-7Z M4 12h2m12 0h2M6.1 6.1l1.4 1.4m9 9l1.4 1.4M6.1 17.9l1.4-1.4m9-9l1.4-1.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            Settings
+          </button>
+          <h3 style="margin:0;">Sora Batch Downloader</h3>
+          <div id="close" title="Close">&times;</div>
+        </div>
+  
+        <div id="await">
+          <div class="spin"></div>
+          <p>Awaiting Token...</p>
+          <p class="sub">Browse Sora (view/create a video) to activate the downloader.</p>
+        </div>
+  
+        <div id="app">
+          <div class="rowc" style="gap:8px;">
+            <button id="run"  class="btn">Generate Download Script</button>
+            <button id="stop" class="btn danger" style="display:none;">Stop</button>
+            <button id="copy" class="btn secondary" style="display:none;">Copy Script</button>
+            <button id="export" class="btn secondary" style="display:none;">Export Manifest (CSV/JSON)</button>
+          </div>
+  
+          <div id="hud">
+            <div class="ringHud" id="hud-ring"></div>
+            <div class="mline" id="hud-main"></div>
+            <div class="sline" id="hud-sub"></div>
+          </div>
+  
+          <div id="status">Ready.</div>
+          <textarea id="out" readonly placeholder="# The script will appear here..."></textarea>
+        </div>
+  
+        <div id="settings">
+          <div class="rows">
+            <div class="rowc group">
+              <label>Download Mode:</label>
+              <div>
+                <label><input type="radio" id="mode-final" name="mode" value="final"> Final Quality (no watermark)</label>
+                <label style="margin-left:16px;"><input type="radio" id="mode-fast" name="mode" value="fast"> Fast Download (with watermark)</label>
+              </div>
+            </div>
+  
+            <div id="fastq-row" class="rowc">
+              <label for="fastq">Fast Quality:</label>
+              <select id="fastq">
+                <option value="source">Source (HD)</option>
+                <option value="md">Medium</option>
+                <option value="ld">Low</option>
+              </select>
+            </div>
+  
+            <div id="parallel-row" class="rowc">
+              <label for="parallel">Parallel RAW requests:</label>
+              <input type="number" id="parallel" min="1" max="20">
+            </div>
+  
+            <div id="limit-row" class="rowc">
+              <label for="limit">List limit (max 100):</label>
+              <input type="number" id="limit" min="1" max="100">
+            </div>
+  
+            <div class="rowc">
+              <label for="dry">Dry-run (comment out curls)</label>
+              <input type="checkbox" id="dry">
+            </div>
+  
+            <div class="rowb group">
+              <label>Direct download (small batches)</label>
+              <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                <label><input type="checkbox" id="direct"> Enable</label>
+                <label>Max tasks <input type="number" id="maxTasks" min="1" max="100" style="width:90px"></label>
+                <label>Parallel <input type="number" id="dParallel" min="1" max="6" style="width:70px"></label>
+                <label><input type="checkbox" id="saveAs"> Save As (per file)</label>
+                <label><input type="checkbox" id="zip" checked> Zip at end (one file)</label>
+              </div>
+              <div class="sub">Each task can yield up to 4 videos. Example: 5 tasks ≈ up to 20 downloads.</div>
+            </div>
+  
+            <button id="btn-save" class="btn" style="align-self:center;">Save & Close</button>
+          </div>
+        </div>
+      </div>
+  
+      <div id="badge"></div>
+    `;
+  
+    const $ = (id: string) => root.getElementById(id)!;
+  
+    return {
+      root,
+      launch: $('launch'), ring: $('ring'), badge: $('badge'),
+      panel: $('panel'), hdrClose: $('close') as HTMLElement, btnSettings: $('btn-settings') as HTMLButtonElement,
+      awaitBox: $('await'), appBox: $('app'),
+      runBtn: $('run') as HTMLButtonElement, stopBtn: $('stop') as HTMLButtonElement, copyBtn: $('copy') as HTMLButtonElement, exportBtn: $('export') as HTMLButtonElement,
+      status: $('status'), out: $('out') as HTMLTextAreaElement,
+      hudWrap: $('hud'), hudRing: $('hud-ring'), hudMain: $('hud-main'), hudSub: $('hud-sub'),
+      settings: $('settings'),
+      modeFinal: $('mode-final') as HTMLInputElement, modeFast: $('mode-fast') as HTMLInputElement,
+      fastqRow: $('fastq-row'), fastq: $('fastq') as HTMLSelectElement,
+      parallelRow: $('parallel-row'), parallel: $('parallel') as HTMLInputElement,
+      limitRow: $('limit-row'), limit: $('limit') as HTMLInputElement,
+      dry: $('dry') as HTMLInputElement,
+      direct: $('direct') as HTMLInputElement, maxTasks: $('maxTasks') as HTMLInputElement, dParallel: $('dParallel') as HTMLInputElement, saveAs: $('saveAs') as HTMLInputElement, zip: $('zip') as HTMLInputElement,
+      btnSave: $('btn-save') as HTMLButtonElement
+    };
+  }
+  

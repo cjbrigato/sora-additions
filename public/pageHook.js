@@ -1,4 +1,4 @@
-// Injected into the page context to robustly capture Bearer token
+// Robust Authorization capture from page context (user gesture friendly)
 (function () {
     const orig = window.fetch;
     window.fetch = async function (...args) {
@@ -22,7 +22,7 @@
           const token = auth.slice('Bearer '.length);
           window.dispatchEvent(new CustomEvent('sora-token', { detail: token }));
         }
-      } catch (_) { /* no header logs */ }
+      } catch (_) {}
       return orig.apply(this, args);
     };
   })();
