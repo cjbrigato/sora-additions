@@ -24,6 +24,7 @@ let refs!: UIRefs;
 let settings: Settings = { ...DEFAULT_SETTINGS };
 let userCaps = { can_download_without_watermark: false };
 let isReady = false;
+let lastManifest = { rows: [], skipped: [], failures: [], mode: 'final', quality: 'source' } as { rows: { id: string; filename: string; url: string }[]; skipped: string[]; failures: { id: string; reason: string }[]; mode: string; quality: string };
 
 let directRunning = false;
 let opActive = false;
@@ -49,7 +50,7 @@ window.addEventListener('sora-token', async (ev: any) => {
       isReady = true;
       renderAppView();
     }
-  } catch {}
+  } catch { }
 });
 
 window.addEventListener('load', async () => {
@@ -90,7 +91,7 @@ function renderAppView() {
 function updateSettingsUI() {
   const canNoWM = !!userCaps?.can_download_without_watermark;
   if (!canNoWM) { refs.modeFinal && (refs.modeFinal.disabled = true); settings.fastDownload = true; }
-  else          { refs.modeFinal && (refs.modeFinal.disabled = false); }
+  else { refs.modeFinal && (refs.modeFinal.disabled = false); }
   if (!settingsOpen) populateSettings();
   updateRunLabel();
 }
@@ -98,14 +99,14 @@ function updateSettingsUI() {
 function populateSettings() {
   refs.parallel && (refs.parallel.value = String(settings.workers));
   refs.modeFinal && (refs.modeFinal.checked = !settings.fastDownload);
-  refs.modeFast  && (refs.modeFast.checked  =  settings.fastDownload);
-  refs.fastq     && (refs.fastq.value       = settings.fastDownloadQuality);
-  refs.limit     && (refs.limit.value       = String(settings.limit));
-  refs.dry       && (refs.dry.checked       = settings.dryRun);
+  refs.modeFast && (refs.modeFast.checked = settings.fastDownload);
+  refs.fastq && (refs.fastq.value = settings.fastDownloadQuality);
+  refs.limit && (refs.limit.value = String(settings.limit));
+  refs.dry && (refs.dry.checked = settings.dryRun);
 
-  refs.direct    && (refs.direct.checked    = settings.directDownload);
-  refs.maxTasks  && (refs.maxTasks.value    = String(settings.directMaxTasks));
-  refs.dParallel && (refs.dParallel.value   = String(settings.directParallel));
+  refs.direct && (refs.direct.checked = settings.directDownload);
+  refs.maxTasks && (refs.maxTasks.value = String(settings.directMaxTasks));
+  refs.dParallel && (refs.dParallel.value = String(settings.directParallel));
   settings.directZip = true;
   settings.directSaveAs = false;
 
@@ -168,17 +169,17 @@ function wireUI() {
 
   // save settings
   refs.btnSave?.addEventListener('click', async () => {
-    settings.workers             = clampInt(refs.parallel?.value, 1, 20, DEFAULT_SETTINGS.workers);
-    settings.fastDownload        = !!refs.modeFast?.checked;
+    settings.workers = clampInt(refs.parallel?.value, 1, 20, DEFAULT_SETTINGS.workers);
+    settings.fastDownload = !!refs.modeFast?.checked;
     settings.fastDownloadQuality = (refs.fastq?.value as any) || settings.fastDownloadQuality;
-    settings.limit               = clampInt(refs.limit?.value, 1, DEFAULT_LIMIT, DEFAULT_SETTINGS.limit);
-    settings.dryRun              = !!refs.dry?.checked;
+    settings.limit = clampInt(refs.limit?.value, 1, DEFAULT_LIMIT, DEFAULT_SETTINGS.limit);
+    settings.dryRun = !!refs.dry?.checked;
 
     settings.directDownload = !!refs.direct?.checked;
     settings.directMaxTasks = clampInt(refs.maxTasks?.value, 1, 100, DEFAULT_SETTINGS.directMaxTasks);
     settings.directParallel = clampInt(refs.dParallel?.value, 1, 6, DEFAULT_SETTINGS.directParallel);
-    settings.directSaveAs   = false;
-    settings.directZip      = true;
+    settings.directSaveAs = false;
+    settings.directZip = true;
 
     await saveSettings(settings);
     refs.settings.style.display = 'none';
@@ -200,8 +201,8 @@ function wireUI() {
 
   // stop
   refs.stopBtn?.addEventListener('click', async () => {
-    try { await send({ type: 'CANCEL_DIRECT_DOWNLOAD' }); } catch {}
-    try { currentAbort?.abort(); } catch {}
+    try { await send({ type: 'CANCEL_DIRECT_DOWNLOAD' }); } catch { }
+    try { currentAbort?.abort(); } catch { }
     opActive = false;
     hidePanelProgress(refs);
     clearMiniBadge(refs);
@@ -209,6 +210,24 @@ function wireUI() {
     updateRunLabel();
     setLauncherPct(undefined);
   });
+
+
+  // Export manifest 
+  refs.exportBtn?.addEventListener('click', () => {
+    if ((!lastManifest.rows?.length) && (!lastManifest.skipped?.length) && (!lastManifest.failures?.length)) {
+      alert('Nothing to export yet.'); return;
+    }
+    const ts = new Date().toISOString().replace(/[:\-]|\.\d{3}Z/g, '').slice(0, 15);
+    const csvHeader = ['id', 'filename', 'url', 'mode', 'quality'];
+    const toCSV = (v: string) => `"${String(v ?? '').replaceAll('"', '""')}"`;
+    const csvRows = [csvHeader.join(',')].concat(lastManifest.rows.map(r =>
+      [r.id, toCSV(r.filename), toCSV(r.url), lastManifest.mode, lastManifest.quality].join(',')
+    ));
+    triggerDownload(new Blob([csvRows.join('\n')], { type: 'text/csv' }), `sora_manifest_${ts}.csv`);
+    triggerDownload(new Blob([JSON.stringify(lastManifest, null, 2)], { type: 'application/json' }), `sora_manifest_${ts}.json`);
+  });
+
+
 
   // run
   refs.runBtn?.addEventListener('click', runOnce);
@@ -220,7 +239,7 @@ function wireUI() {
     if (phase === 'start') refs.status.textContent = `Direct: queued ${msg.total} item(s)…`;
     else if (phase === 'progress') {
       const p = msg.totalBytes ? Math.round((msg.bytesReceived / msg.totalBytes) * 100) : null;
-      refs.status.textContent = `Direct: downloading ${msg.file}${p!=null?' ('+p+'%)':''}`;
+      refs.status.textContent = `Direct: downloading ${msg.file}${p != null ? ' (' + p + '%)' : ''}`;
     } else if (phase === 'item') {
       const base = `Direct: ${msg.state} — ${msg.file}`;
       refs.status.textContent = (typeof msg.done === 'number' && typeof msg.total === 'number')
@@ -234,6 +253,8 @@ function wireUI() {
     }
   });
 }
+
+
 
 // ---------- Run flow ----------
 async function runOnce() {
@@ -325,7 +346,7 @@ async function runOnce() {
           const { root, dir, dirName, metas } = await downloadAllToOPFS({
             items: rows.map(r => ({ url: r.url, filename: r.filename })),
             signal: acDL.signal,
-            onStatus: ({phase, file, index, total}) => {
+            onStatus: ({ phase, file, index, total }) => {
               if (phase === 'dl-progress') {
                 const pct = ((index - 1) / total) * 100;
                 setPanelProgress(refs, pct, `Downloading ${index}/${total}`, file);
@@ -353,13 +374,13 @@ async function runOnce() {
             metas,
             saveHandle: zipHandle,
             signal: acZIP.signal,
-            onStatus: ({phase, file, done, total}) => {
+            onStatus: ({ phase, file, done, total }) => {
               if (phase === 'zip-progress') {
-                setPanelProgress(refs, undefined, `Zipping ${Number(done||0)+1}/${total}`, file);
-                setMiniBadge(refs, `ZIP ${Number(done||0)+1}/${total}`, 'zip');
+                setPanelProgress(refs, undefined, `Zipping ${Number(done || 0) + 1}/${total}`, file);
+                setMiniBadge(refs, `ZIP ${Number(done || 0) + 1}/${total}`, 'zip');
               }
               if (phase === 'zip-file-done') {
-                const pct = (Number(done||0) / Number(total||1)) * 100;
+                const pct = (Number(done || 0) / Number(total || 1)) * 100;
                 setPanelProgress(refs, pct, `Zipped ${done}/${total}`, file);
                 setMiniBadge(refs, `ZIP ${done}/${total}`, 'zip');
                 setLauncherPct(pct);
@@ -383,7 +404,7 @@ async function runOnce() {
           setTimeout(() => { URL.revokeObjectURL(blobUrl); a.remove(); }, 2000);
 
           // Cleanup OPFS
-          try { await opfsRemoveDir(root, dirName); } catch {}
+          try { await opfsRemoveDir(root, dirName); } catch { }
 
           currentAbort = null;
           directRunning = false; updateRunLabel();
@@ -407,6 +428,7 @@ async function runOnce() {
         settings.dryRun
       );
       refs.out.value = script;
+      lastManifest = generateManifest(rows, generateMode, settings.fastDownload ? settings.fastDownloadQuality : 'n/a', failures);
 
       let finalStatus = `Done! Script for ${rows.length} videos.`;
       if (failures.length) finalStatus += ` (${failures.length} failed).`;
@@ -441,10 +463,10 @@ async function runOnce() {
 
 // ---------- helpers ----------
 function generateScript(
-  downloadRows: {id:string,url:string,filename:string}[],
-  mode: 'fast'|'final'|'images',
+  downloadRows: { id: string, url: string, filename: string }[],
+  mode: 'fast' | 'final' | 'images',
   quality: string,
-  failures: {id:string,reason:string}[],
+  failures: { id: string, reason: string }[],
   dryRun: boolean
 ) {
   const tasktypeDesc = mode === 'images' ? "Images" : mode === 'fast' ? `Fast Download (Watermarked, ${quality})` : "Final Quality (No Watermark)";
@@ -473,11 +495,29 @@ function generateScript(
     if (refs.tasktype.value === 'images') {
       fname = `sora_${row.id}.png`;
     }
-    blocks.push(`curl -L -C - --fail --retry 5 --retry-delay 2 -o "${fname}" "${row.url.replace(/"/g,'\\"')}"`);
+    blocks.push(`curl -L -C - --fail --retry 5 --retry-delay 2 -o "${fname}" "${row.url.replace(/"/g, '\\"')}"`);
   }
   if (dryRun) {
     blocks.push(`EOF`);
   }
   blocks.push(``, `echo "Download completed!"`);
   return [...hdr, ...blocks].join('\n');
+}
+
+function generateManifest(  downloadRows: { id: string, url: string, filename: string }[],
+  mode: 'fast' | 'final' | 'images',
+  quality: string,
+  failures: { id: string, reason: string }[]){
+    const manifest = { rows: [], skipped: [], failures: [], mode: 'final', quality: 'source' } as { rows: { id: string; filename: string; url: string }[]; skipped: string[]; failures: { id: string; reason: string }[]; mode: string; quality: string };
+    manifest.rows = downloadRows.map(r => ({ id: r.id, filename: r.filename, url: r.url }));
+    manifest.failures = failures;
+    manifest.mode = mode;
+    manifest.quality = quality;
+    return manifest;
+}
+
+function triggerDownload(blob: Blob, filename: string) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = filename; refs.root.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 800);
 }
