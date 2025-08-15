@@ -60,7 +60,7 @@ export function buildUI(): UIRefs {
 }
 .btn.ghost:hover{ filter:none; transform:none; border-color:#4a4a50; color:#f0f0f3; }
 .btn svg{ width:16px; height:16px; opacity:.95 }
-  
+.sora-setting-inactive{ opacity:.5; pointer-events:none; filter:grayscale(.2) brightness(.9); }
         #launch{
           position: fixed; right: 18px; bottom: 18px; width: 56px; height: 56px;
           border-radius: 50%; background:#111; color:#fff; display:flex; align-items:center; justify-content:center;
@@ -117,6 +117,11 @@ export function buildUI(): UIRefs {
           box-shadow: inset 0 0 0 2px #1d1d1d, 0 0 0 1px #0008; }
         .mline{ color:#ddd; font-size:14px; text-align:center; }
         .sline{ color:#aaa; font-size:12px; text-align:center; max-width:90%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+          #btn-settings{
+            background:transparent; border:1px solid #444; color:#ddd; padding:4px 8px; border-radius:8px; cursor:pointer;
+          }
+          #btn-settings:hover{ border-color:#777; color:#fff; }
       </style>
   
       <div id="launch" title="Open Sora Batch Downloader">
@@ -129,10 +134,7 @@ export function buildUI(): UIRefs {
   
       <div id="panel">
         <div id="hdr">
-          <button id="btn-settings" class="btn ghost" title="Settings">
-            <svg viewBox="0 0 24 24" fill="none"><path d="M12 8.5a3.5 3.5 0 1 0 0 7a3.5 3.5 0 0 0 0-7Z M4 12h2m12 0h2M6.1 6.1l1.4 1.4m9 9l1.4 1.4M6.1 17.9l1.4-1.4m9-9l1.4-1.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-            Settings
-          </button>
+          <button id="btn-settings" class="btn ghost" title="Settings">⚙️ Settings</button>
           <h3 style="margin:0;">Sora Batch Downloader</h3>
           <div id="close" title="Close">&times;</div>
         </div>
