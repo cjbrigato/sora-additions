@@ -11,7 +11,7 @@ Chrome extension that plugs **directly** into Sora’s UI to help you retrieve y
 * Supports **images** and **videos** batch download
 
 * **Retrieval modes**
-  * **ZIP mode (default, batches):** downloads files **locally**, then streams a **single ZIP (STORE)** and triggers **one** browser download. Respects Chrome’s *Always ask where to save*; appears once in the Downloads list.
+  * **ZIP mode (default, batches):** downloads files **locally**, then streams a **single ZIP (STORE)** and triggers **one** browser download. Respects Chrome’s *Always ask where to save*; appears once in the Downloads list. Flow: **DL → OPFS → ZIP → single browser download**.
 * **Smart & safe**
   * **Task-gating:** Direct/ZIP operates on up to **N tasks** (cap configurable), with the website list also capped at **100** by design. Each task can yield **up to 4 videos**.
   * **Permission-aware:** if your plan doesn’t allow watermark-free download, **Final** is disabled; you can still use **Fast Preview**.
@@ -30,12 +30,7 @@ Chrome extension that plugs **directly** into Sora’s UI to help you retrieve y
 * **Download Mode**
   * **Final Quality** (no watermark) — if allowed by your plan.
   * **Fast Preview** (watermarked source/MD/LD).
-* **Direct Download (small batches)**
-
-  * **Enable**, **Max tasks**, **Parallel** (1–6).
-* **ZIP mode (batches)**
-  * Enabled by default. Flow: **DL → OPFS → ZIP → single browser download**.
-    *No picker mid-process; picker only appears if your Chrome setting asks at download time.*
+* **Enable**, **Max tasks**, **Parallel** (1–6).
 
 ## Install
 
