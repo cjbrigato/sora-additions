@@ -551,9 +551,18 @@
                 </div>
                 <div class="sub">Each task can yield up to 4 videos. Example: 5 tasks ≈ up to 20 downloads.</div>
             </div>
-
-            <button id="btn-save" class="btn" style="align-self:center;">Save & Close</button>
+            <div class="rowb">
+                <label>Zip Embeddings</label>
+                <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                    <label><input type="checkbox" id="manifest-zip">Manifests (CSV/JSON)</label>
+                    <label><input type="checkbox" id="script-zip">Script (bash)</label>
+                </div>
+            </div>
+            <div></div>
         </div>
+
+        <button id="btn-save" class="btn" style="align-self:center;">Save & Close</button>
     </div>
+</div>
 </div>
 <div id="badge"></div>

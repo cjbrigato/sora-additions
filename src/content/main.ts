@@ -12,7 +12,7 @@ import {
   type Task
 } from '../modules/sora_api';
 import {
-  downloadAllToOPFS, writeZipFromOPFS, opfsRemoveDir
+  downloadAllToOPFS, writeZipFromOPFS, opfsRemoveDir, writeManifestsToOPFS, writeScriptToOPFS
 } from '../modules/zip_store';
 
 // ---------- Messaging helper ----------
@@ -25,6 +25,7 @@ let settings: Settings = { ...DEFAULT_SETTINGS };
 let userCaps = { can_download_without_watermark: false };
 let isReady = false;
 let lastManifest = { rows: [], skipped: [], failures: [], mode: 'final', quality: 'source' } as { rows: { id: string; filename: string; url: string }[]; skipped: string[]; failures: { id: string; reason: string }[]; mode: string; quality: string };
+let lastScript = '';
 
 let directRunning = false;
 let opActive = false;
@@ -107,6 +108,8 @@ function populateSettings() {
   refs.direct && (refs.direct.checked = settings.directDownload);
   refs.maxTasks && (refs.maxTasks.value = String(settings.directMaxTasks));
   refs.dParallel && (refs.dParallel.value = String(settings.directParallel));
+  refs.manifestZip && (refs.manifestZip.checked = settings.directZipManifest);
+  refs.scriptZip && (refs.scriptZip.checked = settings.directZipScript);
   settings.directZip = true;
   settings.directSaveAs = false;
 
@@ -362,6 +365,26 @@ async function runOnce() {
             }
           });
 
+          if (settings.directZipManifest || settings.directZipScript) {
+            const generateMode = refs.tasktype.value === 'images' ? 'images' : settings.fastDownload ? 'fast' : 'final';
+            if (settings.directZipManifest) {
+              const onceManifest = generateManifest(rows, generateMode, settings.fastDownload ? settings.fastDownloadQuality : 'n/a', failures);
+              const { csvMeta, jsonMeta } = await writeManifestsToOPFS(onceManifest);
+              metas.push(csvMeta, jsonMeta);
+            }
+            if (settings.directZipScript) {
+              const onceScript = generateScript(
+                rows,
+                generateMode,
+                settings.fastDownload ? settings.fastDownloadQuality : 'n/a',
+                failures,
+                settings.dryRun
+              );
+              const scriptMeta = await writeScriptToOPFS(onceScript);
+              metas.push(scriptMeta);
+            }
+          }
+
           // Phase B: ZIP → one browser download
           const acZIP = new AbortController(); currentAbort = acZIP;
           setPanelProgress(refs, undefined, `Preparing ZIP…`, '');
@@ -428,6 +451,7 @@ async function runOnce() {
         settings.dryRun
       );
       refs.out.value = script;
+      lastScript = script;
       lastManifest = generateManifest(rows, generateMode, settings.fastDownload ? settings.fastDownloadQuality : 'n/a', failures);
 
       let finalStatus = `Done! Script for ${rows.length} videos.`;
@@ -504,16 +528,16 @@ function generateScript(
   return [...hdr, ...blocks].join('\n');
 }
 
-function generateManifest(  downloadRows: { id: string, url: string, filename: string }[],
+function generateManifest(downloadRows: { id: string, url: string, filename: string }[],
   mode: 'fast' | 'final' | 'images',
   quality: string,
-  failures: { id: string, reason: string }[]){
-    const manifest = { rows: [], skipped: [], failures: [], mode: 'final', quality: 'source' } as { rows: { id: string; filename: string; url: string }[]; skipped: string[]; failures: { id: string; reason: string }[]; mode: string; quality: string };
-    manifest.rows = downloadRows.map(r => ({ id: r.id, filename: r.filename, url: r.url }));
-    manifest.failures = failures;
-    manifest.mode = mode;
-    manifest.quality = quality;
-    return manifest;
+  failures: { id: string, reason: string }[]) {
+  const manifest = { rows: [], skipped: [], failures: [], mode: 'final', quality: 'source' } as { rows: { id: string; filename: string; url: string }[]; skipped: string[]; failures: { id: string; reason: string }[]; mode: string; quality: string };
+  manifest.rows = downloadRows.map(r => ({ id: r.id, filename: r.filename, url: r.url }));
+  manifest.failures = failures;
+  manifest.mode = mode;
+  manifest.quality = quality;
+  return manifest;
 }
 
 function triggerDownload(blob: Blob, filename: string) {

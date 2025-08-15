@@ -11,6 +11,8 @@ export type Settings = {
   directParallel: number;
   directSaveAs: boolean;
   directZip: boolean;
+  directZipManifest: boolean;
+  directZipScript: boolean;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -23,7 +25,9 @@ export const DEFAULT_SETTINGS: Settings = {
   directMaxTasks: 10,
   directParallel: 3,
   directSaveAs: false,
-  directZip: true
+  directZip: true,
+  directZipManifest: true,
+  directZipScript: true
 };
 
 export function clampInt(v: any, min: number, max: number, fallback: number): number {

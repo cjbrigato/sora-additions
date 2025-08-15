@@ -1,6 +1,10 @@
 // OPFS + ZIP (STORE) utilities — classic PKZIP (no ZIP64).
 export type Meta = { name: string; size: number; crc: number; handle: FileSystemFileHandle };
 
+const scriptName = 'script.sh';
+const csvManifestName = 'manifest.csv';
+const jsonManifestName = 'manifest.json';
+
 const CRC_TABLE = (() => {
   const t = new Uint32Array(256);
   for (let n = 0; n < 256; n++) {
@@ -21,8 +25,8 @@ const te = new TextEncoder();
 
 function dosDateTime(d = new Date()) {
   const dt = new Uint16Array(2);
-  dt[0] = ((d.getHours() & 0x1F) << 11) | ((d.getMinutes() & 0x3F) << 5) | (Math.floor(d.getSeconds()/2) & 0x1F);
-  dt[1] = (((d.getFullYear()-1980) & 0x7F) << 9) | (((d.getMonth()+1) & 0x0F) << 5) | (d.getDate() & 0x1F);
+  dt[0] = ((d.getHours() & 0x1F) << 11) | ((d.getMinutes() & 0x3F) << 5) | (Math.floor(d.getSeconds() / 2) & 0x1F);
+  dt[1] = (((d.getFullYear() - 1980) & 0x7F) << 9) | (((d.getMonth() + 1) & 0x0F) << 5) | (d.getDate() & 0x1F);
   return dt;
 }
 
@@ -38,12 +42,51 @@ export async function opfsBatchRoot() {
 }
 
 export async function opfsRemoveDir(root: FileSystemDirectoryHandle, name: string) {
-  try { await root.removeEntry(name, { recursive: true }); } catch {}
+  try { await root.removeEntry(name, { recursive: true }); } catch { }
 }
+
+export async function writeManifestsToOPFS(lastManifest: { rows: { id: string; filename: string; url: string }[]; skipped: string[]; failures: { id: string; reason: string }[]; mode: string; quality: string }): Promise<{ csvMeta: Meta; jsonMeta: Meta }> {
+  const { root, dir, dirName } = await opfsBatchRoot();
+  const csvHeader = ['id', 'filename', 'url', 'mode', 'quality'];
+  const toCSV = (v: string) => `"${String(v ?? '').replaceAll('"', '""')}"`;
+  const csvRows = [csvHeader.join(',')].concat(lastManifest.rows.map(r =>
+    [r.id, toCSV(r.filename), toCSV(r.url), lastManifest.mode, lastManifest.quality].join(',')
+  ));
+  const csvManifest = csvRows.join('\n');
+  const jsonManifest = JSON.stringify(lastManifest, null, 2);
+
+  const csvManifestFile = await dir.getFileHandle(csvManifestName, { create: true });
+  const jsonManifestFile = await dir.getFileHandle(jsonManifestName, { create: true });
+
+  const csvManifestWriter = await csvManifestFile.createWritable();
+  await csvManifestWriter.write(csvManifest);
+  await csvManifestWriter.close();
+
+  const jsonManifestWriter = await jsonManifestFile.createWritable();
+  await jsonManifestWriter.write(jsonManifest);
+  await jsonManifestWriter.close();
+  const crcCSV = crc32Update(0, te.encode(csvManifest));
+  const crcJSON = crc32Update(0, te.encode(jsonManifest));
+  const csvMeta = { name: csvManifestName, size: csvManifest.length, crc: crcCSV, handle: csvManifestFile };
+  const jsonMeta = { name: jsonManifestName, size: jsonManifest.length, crc: crcJSON, handle: jsonManifestFile };
+  return { csvMeta, jsonMeta };
+}
+
+export async function writeScriptToOPFS(script: string): Promise<Meta> {
+  const { root, dir, dirName } = await opfsBatchRoot();
+  const scriptFile = await dir.getFileHandle(scriptName, { create: true });
+  const scriptWriter = await scriptFile.createWritable();
+  await scriptWriter.write(script);
+  await scriptWriter.close();
+  const crc = crc32Update(0, te.encode(script));
+  const scriptMeta = { name: scriptName, size: script.length, crc, handle: scriptFile };
+  return scriptMeta;
+}
+
 
 export async function downloadAllToOPFS(opts: {
   items: { url: string; filename: string }[];
-  onStatus?: (ev: { phase: 'dl-progress'|'dl-file-done'; file: string; index: number; total: number }) => void;
+  onStatus?: (ev: { phase: 'dl-progress' | 'dl-file-done'; file: string; index: number; total: number }) => void;
   signal?: AbortSignal;
 }) {
   const { items, onStatus, signal } = opts;
@@ -68,7 +111,7 @@ export async function downloadAllToOPFS(opts: {
       crc = crc32Update(crc, chunk);
       size += chunk.length;
       await w.write(chunk);
-      onStatus?.({ phase: 'dl-progress', file: safeName, index: idx+1, total: items.length });
+      onStatus?.({ phase: 'dl-progress', file: safeName, index: idx + 1, total: items.length });
     }
     await w.close();
     metas.push({ name: safeName, size, crc, handle: fh });
@@ -81,7 +124,7 @@ export async function downloadAllToOPFS(opts: {
 export async function writeZipFromOPFS(opts: {
   metas: Meta[];
   saveHandle: FileSystemFileHandle;
-  onStatus?: (ev: { phase: 'zip-progress'|'zip-file-done'|'zip-done'|'cancel_done'; file?: string; done?: number; total?: number }) => void;
+  onStatus?: (ev: { phase: 'zip-progress' | 'zip-file-done' | 'zip-done' | 'cancel_done'; file?: string; done?: number; total?: number }) => void;
   signal?: AbortSignal;
 }) {
   const { metas, saveHandle, onStatus, signal } = opts;

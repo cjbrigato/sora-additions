@@ -18,6 +18,7 @@ export type UIRefs = {
     limitRow?: HTMLElement; limit?: HTMLInputElement;
     dry?: HTMLInputElement;
     direct?: HTMLInputElement; maxTasks?: HTMLInputElement; dParallel?: HTMLInputElement;
+    manifestZip?: HTMLInputElement; scriptZip?: HTMLInputElement;
     btnSave?: HTMLButtonElement;
     shadowIsLoaded: boolean;
 };
@@ -59,6 +60,7 @@ export async function buildUI(): Promise<UIRefs> {
         limitRow: $('limit-row'), limit: $('limit') as HTMLInputElement,
         dry: $('dry') as HTMLInputElement,
         direct: $('direct') as HTMLInputElement, maxTasks: $('maxTasks') as HTMLInputElement, dParallel: $('dParallel') as HTMLInputElement,
+        manifestZip: $('manifest-zip') as HTMLInputElement, scriptZip: $('script-zip') as HTMLInputElement,
         btnSave: $('btn-save') as HTMLButtonElement,
         shadowIsLoaded
     };
