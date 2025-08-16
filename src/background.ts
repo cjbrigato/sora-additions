@@ -35,12 +35,9 @@ chrome.runtime.onMessage.addListener((msg: any, sender: any, sendResponse: any) 
           catch (e: any) { sendResponse({ ok: false, error: String(e?.message || e) }); }
           return;
 
-        case 'START_DIRECT_DOWNLOAD':
-          startDirect(sender?.tab?.id, msg.items || [], Math.max(1, msg.parallel | 0) || 3, !!msg.saveAs);
-          sendResponse({ ok: true }); return;
-
         case 'CANCEL_DIRECT_DOWNLOAD':
-          cancelDirect(); sendResponse({ ok: true }); return;
+          //cancelDirect(); 
+          sendResponse({ ok: true }); return;
 
         default: sendResponse({ ok: false, error: 'Unknown message type' }); return;
       }
@@ -73,50 +70,3 @@ async function fetchRawWithRetry(id: string, attempt: number): Promise<string> {
     return fetchRawWithRetry(id, attempt + 1);
   }
 }
-
-// --- chrome.downloads queue (for small direct batches) ---
-type Item = { url: string; filename: string };
-let batch: null | { tabId: number, queue: Item[], active: number, max: number, done: number, total: number, idMap: Map<number, string>, saveAs: boolean, cancelling: boolean } = null;
-
-function startDirect(tabId: number, items: Item[], parallel: number, saveAs: boolean) {
-  if (!tabId || !items.length) return;
-  batch = { tabId, queue: items.slice(), active: 0, max: parallel, done: 0, total: items.length, idMap: new Map(), saveAs: !!saveAs, cancelling: false };
-  push({ phase: 'start', total: batch.total });
-  while (batch.active < batch.max) dequeueNext();
-}
-function cancelDirect() {
-  if (!batch) return;
-  batch.cancelling = true; batch.queue.length = 0; push({ phase: 'cancel_start' });
-  for (const id of Array.from(batch.idMap.keys())) { try { chrome.downloads.cancel(id); } catch { } }
-}
-function dequeueNext() {
-  if (!batch) return;
-  if (!batch.queue.length) {
-    if (batch.active === 0) { push({ phase: batch.cancelling ? 'cancel_done' : 'done', done: batch.done, total: batch.total }); batch = null; }
-    return;
-  }
-  const item = batch.queue.shift()!;
-  batch.active++;
-  chrome.downloads.download({ url: item.url, filename: item.filename, conflictAction: 'uniquify', saveAs: batch.saveAs }, (dlId: number) => {
-    if (!dlId) { batch!.active--; push({ phase: 'item', state: 'interrupted', file: item.filename }); dequeueNext(); return; }
-    batch!.idMap.set(dlId, item.filename);
-  });
-}
-chrome.downloads.onChanged.addListener((d: any) => {
-  if (!batch) return;
-  const file = batch.idMap.get(d.id);
-  if (!file) return;
-
-  if (d.state?.current === 'complete') {
-    batch.done++; batch.active--; batch.idMap.delete(d.id);
-    push({ phase: 'item', state: 'complete', file, done: batch.done, total: batch.total });
-    dequeueNext();
-  } else if (d.state?.current === 'interrupted') {
-    batch.active--; batch.idMap.delete(d.id);
-    push({ phase: 'item', state: 'interrupted', file });
-    dequeueNext();
-  } else if (d.bytesReceived || d.totalBytes) {
-    push({ phase: 'progress', file, bytesReceived: d.bytesReceived?.current, totalBytes: d.totalBytes?.current });
-  }
-});
-function push(payload: any) { if (!batch) return; chrome.tabs.sendMessage(batch.tabId, { type: 'DIRECT_PROGRESS', ...payload }); }

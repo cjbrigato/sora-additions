@@ -1,3 +1,5 @@
+import { JSONManifest } from "./manifest";
+
 // OPFS + ZIP (STORE) utilities — classic PKZIP (no ZIP64).
 export type Meta = { name: string; size: number; crc: number; handle: FileSystemFileHandle };
 
@@ -45,31 +47,16 @@ export async function opfsRemoveDir(root: FileSystemDirectoryHandle, name: strin
   try { await root.removeEntry(name, { recursive: true }); } catch { }
 }
 
-export async function writeManifestsToOPFS(lastManifest: { rows: { id: string; filename: string; url: string }[]; skipped: string[]; failures: { id: string; reason: string }[]; mode: string; quality: string }): Promise<{ csvMeta: Meta; jsonMeta: Meta }> {
+export async function writeManifestsToOPFS(jsonManifest: JSONManifest): Promise<Meta> {
   const { root, dir, dirName } = await opfsBatchRoot();
-  const csvHeader = ['id', 'filename', 'url', 'mode', 'quality'];
-  const toCSV = (v: string) => `"${String(v ?? '').replaceAll('"', '""')}"`;
-  const csvRows = [csvHeader.join(',')].concat(lastManifest.rows.map(r =>
-    [r.id, toCSV(r.filename), toCSV(r.url), lastManifest.mode, lastManifest.quality].join(',')
-  ));
-  const csvManifest = csvRows.join('\n');
-  const jsonManifest = JSON.stringify(lastManifest, null, 2);
-
-  const csvManifestFile = await dir.getFileHandle(csvManifestName, { create: true });
+  const jsonManifestString = JSON.stringify(jsonManifest, null, 2);
   const jsonManifestFile = await dir.getFileHandle(jsonManifestName, { create: true });
-
-  const csvManifestWriter = await csvManifestFile.createWritable();
-  await csvManifestWriter.write(csvManifest);
-  await csvManifestWriter.close();
-
   const jsonManifestWriter = await jsonManifestFile.createWritable();
-  await jsonManifestWriter.write(jsonManifest);
+  await jsonManifestWriter.write(jsonManifestString);
   await jsonManifestWriter.close();
-  const crcCSV = crc32Update(0, te.encode(csvManifest));
-  const crcJSON = crc32Update(0, te.encode(jsonManifest));
-  const csvMeta = { name: csvManifestName, size: csvManifest.length, crc: crcCSV, handle: csvManifestFile };
-  const jsonMeta = { name: jsonManifestName, size: jsonManifest.length, crc: crcJSON, handle: jsonManifestFile };
-  return { csvMeta, jsonMeta };
+  const crcJSON = crc32Update(0, te.encode(jsonManifestString));
+  const jsonMeta = { name: jsonManifestName, size: jsonManifestString.length, crc: crcJSON, handle: jsonManifestFile };
+  return jsonMeta;
 }
 
 export async function writeScriptToOPFS(script: string): Promise<Meta> {

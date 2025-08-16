@@ -1,80 +1,12 @@
+import { PrunedTask, SoraExtendedTask } from './sora_api';
 import * as SoraTypes from './sora_types'
 
-export type CSVManifestRow = { id: string; task_id: string; filename: string; url: string }
-export type CSVManifest = { rows: CSVManifestRow[]; skipped: string[]; failures: { id: string; reason: string }[]; mode: string; quality: string }
-
-export type ManifestGeneration = SoraTypes.Generation & { result_filename: string, result_url: string }
-export type ManifestTask = SoraTypes.Task & { generations: ManifestGeneration[] }
 
 export type JSONManifestGeneration = { id: string, filename: string, url: string }
 export type JSONManifestTask = { id: string, generations: JSONManifestGeneration[] }
-export type JSONManifest = { tasks: JSONManifestTask[], skipped: string[], failures: { id: string; reason: string }[]; mode: string; quality: string }
+export type JSONManifest = { task_type: string,tasks: JSONManifestTask[], pruned: PrunedTask[], failures: { id: string; reason: string }[]; mode: string; quality: string }
 
-export type Manifest = {
-    csv: CSVManifest,
-    json: JSONManifest
-}
-
-export function makeManifestGeneration(generation: SoraTypes.Generation, result_filename: string, result_url: string): ManifestGeneration {
-    return {
-        ...generation,
-        result_filename: result_filename,
-        result_url: result_url
-    }
-}
-
-export function emptyManifestTaskFromTask(task: SoraTypes.Task): ManifestTask {
-    return makeManifestTask(task, [])
-}
-
-export function appendManifestTask(task: ManifestTask, generation: ManifestGeneration): ManifestTask {
-    return makeManifestTask(task, [...task.generations, generation])
-}
-
-export function makeManifestTask(task: SoraTypes.Task, generations: ManifestGeneration[]): ManifestTask {
-    return {
-        ...task,
-        generations: generations
-    }
-}
-
-export function makeManifestTaskFromTaskAndGenerations(task: SoraTypes.Task, generations: { generation: SoraTypes.Generation, result_filename: string, result_url: string }[]): ManifestTask {
-    return makeManifestTask(task, generations.map(g => makeManifestGeneration(g.generation, g.result_filename, g.result_url)))
-}
-
-
-export function generateCSVManifestRows(tasks: ManifestTask[]): CSVManifestRow[] {
-    let rows: CSVManifestRow[] = []
-    for (const task of tasks) {
-        for (const generation of task.generations) {
-            rows.push({ id: generation.id, task_id: task.id, filename: generation.result_filename, url: generation.result_url })
-        }
-    }
-    return rows
-}
-
-export function generateCSVManifest(tasks: ManifestTask[],
-    mode: 'fast' | 'final' | 'images',
-    quality: string,
-    failures: { id: string, reason: string }[]): CSVManifest {
-    const manifest: CSVManifest = { rows: [], skipped: [], failures: [], mode: 'final', quality: 'source' }
-    manifest.rows = generateCSVManifestRows(tasks)
-    manifest.failures = failures
-    manifest.mode = mode
-    manifest.quality = quality
-    return manifest
-}
-
-export function CSVManifestToCSV(manifest: CSVManifest): string {
-    const csvHeader = ['task_id', 'id', 'filename', 'url', 'mode', 'quality'];
-    const toCSV = (v: string) => `"${String(v ?? '').replaceAll('"', '""')}"`;
-    const csvRows = [csvHeader.join(',')].concat(manifest.rows.map(r =>
-        [r.task_id, r.id, toCSV(r.filename), toCSV(r.url), manifest.mode, manifest.quality].join(',')
-    ));
-    return csvRows.join('\n');
-}
-
-export function generateJSONManifestTasks(tasks: ManifestTask[]): JSONManifestTask[] {
+export function generateJSONManifestTasks(tasks: SoraExtendedTask[]): JSONManifestTask[] {
     let json_tasks: JSONManifestTask[] = []
     for (const task of tasks) {
         let json_task: JSONManifestTask = { id: task.id, generations: [] }
@@ -86,15 +18,11 @@ export function generateJSONManifestTasks(tasks: ManifestTask[]): JSONManifestTa
     return json_tasks
 }
 
-export function generateJSONManifest(tasks: ManifestTask[],
+export function generateJSONManifest(task_type: string,tasks: SoraExtendedTask[],pruned: PrunedTask[],
     mode: 'fast' | 'final' | 'images',
     quality: string,
     failures: { id: string, reason: string }[]): JSONManifest {
-    const manifest: JSONManifest = { tasks: [], skipped: [], failures: [], mode: 'final', quality: 'source' }
-    manifest.tasks = generateJSONManifestTasks(tasks)
-    manifest.failures = failures
-    manifest.mode = mode
-    manifest.quality = quality
+    const manifest: JSONManifest = { task_type: task_type, tasks: generateJSONManifestTasks(tasks), pruned: pruned, failures: failures, mode: mode, quality: quality }
     return manifest
 }
 

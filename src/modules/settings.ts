@@ -9,8 +9,6 @@ export type Settings = {
   directDownload: boolean;
   directMaxTasks: number;
   directParallel: number;
-  directSaveAs: boolean;
-  directZip: boolean;
   directZipManifest: boolean;
   directZipScript: boolean;
 };
@@ -24,8 +22,6 @@ export const DEFAULT_SETTINGS: Settings = {
   directDownload: false,
   directMaxTasks: 10,
   directParallel: 3,
-  directSaveAs: false,
-  directZip: true,
   directZipManifest: true,
   directZipScript: true
 };
@@ -47,8 +43,6 @@ export async function loadSettings(): Promise<Settings> {
         s.limit          = clampInt(s.limit, 1, DEFAULT_LIMIT, DEFAULT_SETTINGS.limit);
         s.directMaxTasks = clampInt(s.directMaxTasks, 1, 100, DEFAULT_SETTINGS.directMaxTasks);
         s.directParallel = clampInt(s.directParallel, 1, 6, DEFAULT_SETTINGS.directParallel);
-        s.directSaveAs   = !!s.directSaveAs;
-        s.directZip      = !!s.directZip;
         resolve(s);
       } catch {
         resolve({ ...DEFAULT_SETTINGS });

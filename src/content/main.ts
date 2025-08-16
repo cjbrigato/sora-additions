@@ -8,15 +8,18 @@ import {
   loadSettings, saveSettings, type Settings
 } from '../modules/settings';
 import {
-  filterGenerations, countValidTasks, fetchRawWithConcurrency,
+  fetchRawWithConcurrency,
   filterTasks,
+  extendSoraTasks,
+  SoraExtendedGeneration,
+  emptySoraExtendedTasksMap,
 } from '../modules/sora_api';
 import {
   downloadAllToOPFS, writeZipFromOPFS, opfsRemoveDir, writeManifestsToOPFS, writeScriptToOPFS
 } from '../modules/zip_store';
 import * as SoraTypes from '../modules/sora_types'
 import * as BatchManifest from '../modules/manifest'
-import { makeManifestTask, makeManifestTaskFromTaskAndGenerations } from '../modules/manifest';
+import { generateJSONManifest } from '../modules/manifest';
 
 
 // ---------- Messaging helper ----------
@@ -28,10 +31,8 @@ let refs!: UIRefs;
 let settings: Settings = { ...DEFAULT_SETTINGS };
 let userCaps = { can_download_without_watermark: false };
 let isReady = false;
-let lastManifest = { rows: [], skipped: [], failures: [], mode: 'final', quality: 'source' } as { rows: { id: string; filename: string; url: string }[]; skipped: string[]; failures: { id: string; reason: string }[]; mode: string; quality: string };
+let lastJsonManifest: BatchManifest.JSONManifest = { task_type: '', tasks: [], pruned: [], failures: [], mode: 'final', quality: 'source' }
 let lastScript = '';
-
-let lastBatchManifest: BatchManifest.Manifest = { csv: { rows: [], skipped: [], failures: [], mode: 'final', quality: 'source' }, json: { tasks: [], skipped: [], failures: [], mode: 'final', quality: 'source' } }
 
 let directRunning = false;
 let opActive = false;
@@ -116,8 +117,6 @@ function populateSettings() {
   refs.dParallel && (refs.dParallel.value = String(settings.directParallel));
   refs.manifestZip && (refs.manifestZip.checked = settings.directZipManifest);
   refs.scriptZip && (refs.scriptZip.checked = settings.directZipScript);
-  settings.directZip = true;
-  settings.directSaveAs = false;
 
   toggleFast(settings.fastDownload);
   applyDirectDisable(settings.directDownload);
@@ -137,7 +136,7 @@ function applyDirectDisable(enabled: boolean) {
 function updateRunLabel() {
   refs.runBtn.textContent = !settings.directDownload
     ? 'Generate Download Script'
-    : (settings.directZip ? 'Zip & Download' : 'Direct Download');
+    : 'Zip & Download';
   refs.stopBtn.style.display = directRunning ? 'inline-block' : 'none';
 }
 
@@ -187,8 +186,6 @@ function wireUI() {
     settings.directDownload = !!refs.direct?.checked;
     settings.directMaxTasks = clampInt(refs.maxTasks?.value, 1, 100, DEFAULT_SETTINGS.directMaxTasks);
     settings.directParallel = clampInt(refs.dParallel?.value, 1, 6, DEFAULT_SETTINGS.directParallel);
-    settings.directSaveAs = false;
-    settings.directZip = true;
 
     await saveSettings(settings);
     refs.settings.style.display = 'none';
@@ -223,17 +220,12 @@ function wireUI() {
 
   // Export manifest 
   refs.exportBtn?.addEventListener('click', () => {
-    if ((!lastManifest.rows?.length) && (!lastManifest.skipped?.length) && (!lastManifest.failures?.length)) {
+    if ((!lastJsonManifest.tasks?.length) && (!lastJsonManifest.pruned?.length) && (!lastJsonManifest.failures?.length)) {
       alert('Nothing to export yet.'); return;
     }
     const ts = new Date().toISOString().replace(/[:\-]|\.\d{3}Z/g, '').slice(0, 15);
-    const csvHeader = ['id', 'filename', 'url', 'mode', 'quality'];
-    const toCSV = (v: string) => `"${String(v ?? '').replaceAll('"', '""')}"`;
-    const csvRows = [csvHeader.join(',')].concat(lastManifest.rows.map(r =>
-      [r.id, toCSV(r.filename), toCSV(r.url), lastManifest.mode, lastManifest.quality].join(',')
-    ));
-    triggerDownload(new Blob([csvRows.join('\n')], { type: 'text/csv' }), `sora_manifest_${ts}.csv`);
-    triggerDownload(new Blob([JSON.stringify(lastManifest, null, 2)], { type: 'application/json' }), `sora_manifest_${ts}.json`);
+    const jsonManifestString = BatchManifest.JSONManifestToJSON(lastJsonManifest);
+    triggerDownload(new Blob([jsonManifestString], { type: 'application/json' }), `sora_manifest_${ts}.json`);
   });
 
 
@@ -290,74 +282,71 @@ async function runOnce() {
 
     const resList = await send({ type: 'FETCH_LIST', limit: listLimit, tasktype: refs.tasktype.value });
     if (!resList?.ok) throw new Error(resList?.error || 'List fetch failed');
-    const tasks: SoraTypes.Task[] = Array.isArray(resList.json?.task_responses) ? resList.json.task_responses : [];
+    const _tasks: SoraTypes.Task[] = Array.isArray(resList.json?.task_responses) ? resList.json.task_responses : [];
+    const tasks = extendSoraTasks(_tasks);
 
-    const filteredTasks = filterTasks(tasks)
-    outPrintln(`# Filtered tasks: ${filteredTasks.tasks.length}`)
-    outPrintln(`# Pruning log: ${filteredTasks.pruning_log.length}`)
-    outPrintln(`# Skipped generations: ${filteredTasks.skipped_generations.length}`)
-
-    let manifestGenerations: BatchManifest.ManifestGeneration[] = [];
-    //map taskid to ManifestTask
-    const taskMap = new Map<string, BatchManifest.ManifestTask>();
-    for (const t of filteredTasks.tasks) {
-      taskMap.set(t.id, BatchManifest.emptyManifestTaskFromTask(t));
+    let totalGenerations = 0;
+    for (const t of tasks) {
+      totalGenerations += t.generations.length;
     }
 
-    const { valid } = filterGenerations(tasks);
-    const validTasksCount = countValidTasks(tasks);
-    outPrintln(`# Valid tasks: ${validTasksCount}`)
-    outPrintln(`# Valid generations: ${valid.length}`)
+    const filteredTasks = filterTasks(tasks)
+    outPrintln(`# Task type: ${refs.tasktype.value}`)
+    outPrintln(`# Base total tasks: ${tasks.length}`)
+    outPrintln(`# Base total generations: ${totalGenerations}`)
+    outPrintln(`# Valid tasks: ${filteredTasks.tasks.length}`)
+    outPrintln(`# Pruning log: ${filteredTasks.pruning_log.length}`)
+    outPrintln(`#   Skipped tasks: ${filteredTasks.pruning_log.filter(p => p.kind === 'total').length}`)
+    outPrintln(`#   Partially filtered tasks: ${filteredTasks.pruning_log.filter(p => p.kind === 'partial').length}`)
+    outPrintln(`# Skipped generations: ${filteredTasks.skipped_generations.length}`)
+    outPrintln(`# Valid generations: ${filteredTasks.tasks.reduce((acc, t) => acc + t.generations.length, 0)}`)
+
+
+    const validTasksCount = filteredTasks.tasks.length;
+    const valid: SoraExtendedGeneration[] = filteredTasks.tasks.map(t => t.generations).flat();
     refs.status.textContent = `${valid.length} valid generations found.`;
 
-
-
-    let rows: { id: string; task_id: string; url: string; filename: string }[] = [];
+    let resolved: SoraExtendedGeneration[] = []
     let failures: { id: string; reason: string }[] = [];
 
-    outPrintln(`# Task type: ${refs.tasktype.value}`)
-
     if (valid.length) {
+
+      ///////// URL EXTRACTION /////////
       if (refs.tasktype.value === 'images') {
         outPrintln(`# Extracting URLs directly (Images mode)...`)
         refs.status.textContent = 'Step 2/3: Extracting URLs directly (Images mode)...';
-        rows = valid.map((gen) => {
-          const url = (gen.url || null);
-          return url ? { id: gen.id, task_id: gen.task_id, url, filename: `sora_${gen.task_id}_${gen.id}.png` } : null as any;
-        }).filter(Boolean);
-       
-        manifestGenerations = valid.map((gen) => {
-          const url = (gen.url || null);
-          return url ? BatchManifest.makeManifestGeneration(gen, `sora_${gen.task_id}_${gen.id}.png`, url) : null as any;
-        }).filter(Boolean);
 
+        resolved = valid.map((gen) => {
+          const url = (gen.url || null);
+          if (url) {
+            gen.result_url = url;
+            return gen;
+          }
+          return null as any;
+        }).filter(Boolean);
         setPanelProgress(refs, 100, 'Extracted URLs', '');
         setLauncherPct(100);
       }
       else if (settings.fastDownload) {
         outPrintln(`# Extracting URLs directly (Fast mode)...`)
         refs.status.textContent = 'Step 2/3: Extracting URLs directly (fast mode)...';
-        rows = valid.map((gen) => {
+
+        resolved = valid.map((gen) => {
           const q = settings.fastDownloadQuality;
           const url = (gen.encodings as any)?.[q]?.path || (gen as any)?.url
             || gen?.encodings?.source?.path || gen?.encodings?.md?.path || gen?.encodings?.ld?.path || null;
-          return url ? { id: gen.id, task_id: gen.task_id, url, filename: `sora_${gen.task_id}_${gen.id}.mp4` } : null as any;
+          if (url) {
+            gen.result_url = url;
+            return gen;
+          }
+          return null as any;
         }).filter(Boolean);
 
-        manifestGenerations = valid.map((gen) => {
-          const q = settings.fastDownloadQuality;
-          const url = (gen.encodings as any)?.[q]?.path || (gen as any)?.url
-            || gen?.encodings?.source?.path || gen?.encodings?.md?.path || gen?.encodings?.ld?.path || null;
-          return url ? BatchManifest.makeManifestGeneration(gen, `sora_${gen.task_id}_${gen.id}.mp4`, url) : null as any;
-        }).filter(Boolean);
-
-
-        // step instantly “complete” → show 100%
         setPanelProgress(refs, 100, 'Extracted URLs', '');
         setLauncherPct(100);
       } else {
-        outPrintln(`# Fetching URLs...`)
-        refs.status.textContent = 'Step 2/3: Fetching URLs...';
+        outPrintln(`# Fetching RAW URLs (Final mode)...`)
+        refs.status.textContent = 'Step 2/3: Fetching RAW URLs (Final mode)...';
         // Show HUD + mini badge during /raw
         setPanelProgress(refs, 0, 'Fetching URLs (0/0)', '');
         setMiniBadge(refs, `URL 0/0`, 'dl');
@@ -377,129 +366,138 @@ async function runOnce() {
             }
           }, send);
 
-        outPrintln(`# Successes: ${successes.length}`)
-        outPrintln(`# Failures: ${f.length}`)
-        rows = successes.map(s => ({ id: s.generation.id, task_id: s.generation.task_id, url: s.url, filename: `sora_${s.generation.task_id}_${s.generation.id}.mp4` }));
-        failures = f.map(f => ({ id: f.generation.id, reason: f.reason }));
-        manifestGenerations = successes.map(s => BatchManifest.makeManifestGeneration(s.generation, `sora_${s.generation.task_id}_${s.generation.id}.mp4`, s.url));
-      }
+        outPrintln(`# Raw Fetch Successes: ${successes.length}`)
+        outPrintln(`#            Failures: ${f.length}`)
 
+        resolved = successes.map(s => s.generation);
+        failures = f.map(f => ({ id: f.generation.id, reason: f.reason }));
+      }
+      outPrintln(`# Generations URL extraction complete.`)
+      outPrintln(`#    ${resolved.length}/${valid.length} successfully extracted`)
+      outPrintln(`#    ${valid.length - resolved.length}/${valid.length} missed`)
+      outPrintln(`#    ${failures.length}/${valid.length} explicitely failed`)
+      /////////////// URL EXTRACTION END ///////////////
+
+
+      ///////// MANIFEST GENERATION /////////
+      const generateMode = refs.tasktype.value === 'images' ? 'images' : settings.fastDownload ? 'fast' : 'final';
+      const generateQuality = settings.fastDownload ? settings.fastDownloadQuality : 'n/a';
+      const taskMap = emptySoraExtendedTasksMap(filteredTasks.tasks);
+      for (const res of resolved) {
+        taskMap.get(res.task_id)?.generations.push(res);
+      }
+      const resolvedTasks = Array.from(taskMap.values());
+      lastJsonManifest = generateJSONManifest(refs.tasktype.value, resolvedTasks, filteredTasks.pruning_log, generateMode, generateQuality, failures);
+      outPrintln(`# Manifest generated.`)
+
+      ///////// DIRECT DL //////////////////////////////
       const doDirect = settings.directDownload && validTasksCount <= settings.directMaxTasks;
       if (doDirect) {
+        outPrintln(`# Direct Download started...`)
         directRunning = true; updateRunLabel();
         opActive = true; setMiniBadge(refs, '', 'dl');
 
-        if (settings.directZip) {
-          // Phase A: DL → OPFS
-          outPrintln(`# Downloading ${rows.length} file(s) locally...`)
-          refs.status.textContent = `Downloading ${rows.length} file(s) locally…`;
-          const acDL = new AbortController(); currentAbort = acDL;
-          const { root, dir, dirName, metas } = await downloadAllToOPFS({
-            items: rows.map(r => ({ url: r.url, filename: r.filename })),
-            signal: acDL.signal,
-            onStatus: ({ phase, file, index, total }) => {
-              if (phase === 'dl-progress') {
-                const pct = ((index - 1) / total) * 100;
-                setPanelProgress(refs, pct, `Downloading ${index}/${total}`, file);
-                setMiniBadge(refs, `DL ${index}/${total}`, 'dl');
-                setLauncherPct(pct);
-              }
-              if (phase === 'dl-file-done') {
-                const pct = (index / total) * 100;
-                setPanelProgress(refs, pct, `Downloaded ${index}/${total}`, file);
-                setMiniBadge(refs, `DL ${index}/${total}`, 'dl');
-                setLauncherPct(pct);
-              }
-            }
-          });
-          outPrintln(`# Downloaded ${metas.length} file(s) locally...`)
 
-          if (settings.directZipManifest || settings.directZipScript) {
-            outPrintln(`# Writing manifests to OPFS...`)
-            const generateMode = refs.tasktype.value === 'images' ? 'images' : settings.fastDownload ? 'fast' : 'final';
-            if (settings.directZipManifest) {
-              const onceManifest = generateManifest(rows, generateMode, settings.fastDownload ? settings.fastDownloadQuality : 'n/a', failures);
-              const { csvMeta, jsonMeta } = await writeManifestsToOPFS(onceManifest);
-              metas.push(csvMeta, jsonMeta);
+        // Phase A: DL → OPFS
+        outPrintln(`# Downloading ${resolved.length} file(s) locally...`)
+        refs.status.textContent = `Downloading ${resolved.length} file(s) locally…`;
+        const acDL = new AbortController(); currentAbort = acDL;
+        const { root, dir, dirName, metas } = await downloadAllToOPFS({
+          items: resolved.map(r => ({ url: r.result_url, filename: r.result_filename })),
+          signal: acDL.signal,
+          onStatus: ({ phase, file, index, total }) => {
+            if (phase === 'dl-progress') {
+              const pct = ((index - 1) / total) * 100;
+              setPanelProgress(refs, pct, `Downloading ${index}/${total}`, file);
+              setMiniBadge(refs, `DL ${index}/${total}`, 'dl');
+              setLauncherPct(pct);
             }
-            if (settings.directZipScript) {
-              const onceScript = generateScript(
-                rows,
-                generateMode,
-                settings.fastDownload ? settings.fastDownloadQuality : 'n/a',
-                failures,
-                settings.dryRun,
-                refs.out.value.split('\n')
-              );
-              outPrintln(`# Writing script to OPFS...`)
-              const scriptMeta = await writeScriptToOPFS(onceScript);
-              metas.push(scriptMeta);
+            if (phase === 'dl-file-done') {
+              const pct = (index / total) * 100;
+              setPanelProgress(refs, pct, `Downloaded ${index}/${total}`, file);
+              setMiniBadge(refs, `DL ${index}/${total}`, 'dl');
+              setLauncherPct(pct);
             }
           }
+        });
+        outPrintln(`# Downloaded ${metas.length} file(s) locally...`)
 
-          // Phase B: ZIP → one browser download
-          outPrintln(`# Preparing ZIP...`)
-          const acZIP = new AbortController(); currentAbort = acZIP;
-          setPanelProgress(refs, undefined, `Preparing ZIP…`, '');
-          setMiniBadge(refs, `ZIP 0/${metas.length}`, 'zip');
-
-          const zipName = `${dirName}.zip`;
-          const zipHandle = await dir.getFileHandle(zipName, { create: true });
-
-          await writeZipFromOPFS({
-            metas,
-            saveHandle: zipHandle,
-            signal: acZIP.signal,
-            onStatus: ({ phase, file, done, total }) => {
-              if (phase === 'zip-progress') {
-                setPanelProgress(refs, undefined, `Zipping ${Number(done || 0) + 1}/${total}`, file);
-                setMiniBadge(refs, `ZIP ${Number(done || 0) + 1}/${total}`, 'zip');
-              }
-              if (phase === 'zip-file-done') {
-                const pct = (Number(done || 0) / Number(total || 1)) * 100;
-                setPanelProgress(refs, pct, `Zipped ${done}/${total}`, file);
-                setMiniBadge(refs, `ZIP ${done}/${total}`, 'zip');
-                setLauncherPct(pct);
-              }
-              if (phase === 'zip-done') {
-                setPanelProgress(refs, 100, `ZIP completed (${total} files)`, '');
-                clearMiniBadge(refs);
-                setLauncherPct(100);
-              }
-              if (phase === 'cancel_done') {
-                hidePanelProgress(refs); clearMiniBadge(refs);
-              }
-            }
-          });
-
-          // final browser download
-          outPrintln(`# Final browser download...`)
-          const zipFile = await (await dir.getFileHandle(zipName)).getFile();
-          const blobUrl = URL.createObjectURL(zipFile);
-          const a = document.createElement('a');
-          a.href = blobUrl; a.download = zipName; refs.root.appendChild(a); a.click();
-          setTimeout(() => { URL.revokeObjectURL(blobUrl); a.remove(); }, 2000);
-
-          // Cleanup OPFS
-          try { await opfsRemoveDir(root, dirName); } catch { }
-
-          currentAbort = null;
-          directRunning = false; updateRunLabel();
-          opActive = false; hidePanelProgress(refs); clearMiniBadge(refs);
-          setLauncherPct(undefined);
-
-        } else {
-          // Direct via chrome.downloads
-          outPrintln(`# Direct via chrome.downloads...`)
-          refs.status.textContent = `Direct: starting downloads for ${validTasksCount} task(s) (parallel ${settings.directParallel})…`;
-          await send({ type: 'START_DIRECT_DOWNLOAD', items: rows, parallel: settings.directParallel, saveAs: settings.directSaveAs });
+        if (settings.directZipManifest) {
+          outPrintln(`# Writing manifest to OPFS...`)
+          const jsonMeta = await writeManifestsToOPFS(lastJsonManifest);
+          metas.push(jsonMeta);
         }
-      }
+        if (settings.directZipScript) {
+          const onceScript = generateScript(
+            resolved,
+            generateMode,
+            settings.fastDownload ? settings.fastDownloadQuality : 'n/a',
+            failures,
+            settings.dryRun,
+            refs.out.value.split('\n')
+          );
+          outPrintln(`# Writing script to OPFS...`)
+          const scriptMeta = await writeScriptToOPFS(onceScript);
+          metas.push(scriptMeta);
+        }
 
-      const generateMode = refs.tasktype.value === 'images' ? 'images' : settings.fastDownload ? 'fast' : 'final';
+        // Phase B: ZIP → one browser download
+        outPrintln(`# Preparing ZIP...`)
+        const acZIP = new AbortController(); currentAbort = acZIP;
+        setPanelProgress(refs, undefined, `Preparing ZIP…`, '');
+        setMiniBadge(refs, `ZIP 0/${metas.length}`, 'zip');
+
+        const zipName = `${dirName}.zip`;
+        const zipHandle = await dir.getFileHandle(zipName, { create: true });
+
+        await writeZipFromOPFS({
+          metas,
+          saveHandle: zipHandle,
+          signal: acZIP.signal,
+          onStatus: ({ phase, file, done, total }) => {
+            if (phase === 'zip-progress') {
+              setPanelProgress(refs, undefined, `Zipping ${Number(done || 0) + 1}/${total}`, file);
+              setMiniBadge(refs, `ZIP ${Number(done || 0) + 1}/${total}`, 'zip');
+            }
+            if (phase === 'zip-file-done') {
+              const pct = (Number(done || 0) / Number(total || 1)) * 100;
+              setPanelProgress(refs, pct, `Zipped ${done}/${total}`, file);
+              setMiniBadge(refs, `ZIP ${done}/${total}`, 'zip');
+              setLauncherPct(pct);
+            }
+            if (phase === 'zip-done') {
+              setPanelProgress(refs, 100, `ZIP completed (${total} files)`, '');
+              clearMiniBadge(refs);
+              setLauncherPct(100);
+            }
+            if (phase === 'cancel_done') {
+              hidePanelProgress(refs); clearMiniBadge(refs);
+            }
+          }
+        });
+
+        // final browser download
+        outPrintln(`# Final browser download...`)
+        const zipFile = await (await dir.getFileHandle(zipName)).getFile();
+        const blobUrl = URL.createObjectURL(zipFile);
+        const a = document.createElement('a');
+        a.href = blobUrl; a.download = zipName; refs.root.appendChild(a); a.click();
+        setTimeout(() => { URL.revokeObjectURL(blobUrl); a.remove(); }, 2000);
+
+        // Cleanup OPFS
+        try { await opfsRemoveDir(root, dirName); } catch { }
+
+        currentAbort = null;
+        directRunning = false; updateRunLabel();
+        opActive = false; hidePanelProgress(refs); clearMiniBadge(refs);
+        setLauncherPct(undefined);
+
+      }
+      /////////////// DIRECT DL END ///////////////
+
       // Script fallback
       const script = generateScript(
-        rows,
+        resolved,
         generateMode,
         settings.fastDownload ? settings.fastDownloadQuality : 'n/a',
         failures,
@@ -509,38 +507,18 @@ async function runOnce() {
       refs.out.value = script;
       lastScript = script;
 
-      lastManifest = generateManifest(rows, generateMode, settings.fastDownload ? settings.fastDownloadQuality : 'n/a', failures);
 
-      for (const mg of manifestGenerations) {
-        const task = taskMap.get(mg.task_id);
-        if (task) {
-          const newTask = BatchManifest.appendManifestTask(task, mg);
-          taskMap.set(mg.task_id, newTask);
-        } 
-      }
-      const manifestTasks = Array.from(taskMap.values());
-      lastBatchManifest = {
-        csv: BatchManifest.generateCSVManifest(manifestTasks, generateMode, settings.fastDownload ? settings.fastDownloadQuality : 'n/a', failures),
-        json: BatchManifest.generateJSONManifest(manifestTasks, generateMode, settings.fastDownload ? settings.fastDownloadQuality : 'n/a', failures)
-      }
-      let lastCSVManifest = BatchManifest.CSVManifestToCSV(lastBatchManifest.csv);
-      let lastJSONManifest = BatchManifest.JSONManifestToJSON(lastBatchManifest.json);
-      console.log(lastCSVManifest);
-      console.log(lastJSONManifest);
-
-
-      let finalStatus = `Done! Script for ${rows.length} videos.`;
+      let finalStatus = `Done! Script for ${resolved.length} videos.`;
       if (failures.length) finalStatus += ` (${failures.length} failed).`;
       if (doDirect) finalStatus += ` Direct mode used.`;
       refs.status.textContent = finalStatus;
 
-      refs.copyBtn.style.display = rows.length > 0 ? 'inline-block' : 'none';
-      refs.exportBtn.style.display = rows.length > 0 ? 'inline-block' : 'none';
+      refs.copyBtn.style.display = resolved.length > 0 ? 'inline-block' : 'none';
+      refs.exportBtn.style.display = resolved.length > 0 ? 'inline-block' : 'none';
 
     } else {
       outPrintln(`# No valid video generations found.`)
       refs.status.textContent = 'No valid video generations found.';
-      //refs.out.value = '# No valid videos found.';
     }
 
   } catch (err: any) {
@@ -563,7 +541,7 @@ async function runOnce() {
 
 // ---------- helpers ----------
 function generateScript(
-  downloadRows: { id: string, url: string, filename: string }[],
+  downloadRows: SoraExtendedGeneration[],
   mode: 'fast' | 'final' | 'images',
   quality: string,
   failures: { id: string, reason: string }[],
@@ -598,29 +576,13 @@ function generateScript(
     blocks.push(`cat << 'EOF'`);
   }
   for (const row of downloadRows) {
-    let fname = `sora_${row.id}.mp4`;
-    if (refs.tasktype.value === 'images') {
-      fname = `sora_${row.id}.png`;
-    }
-    blocks.push(`curl -L -C - --fail --retry 5 --retry-delay 2 -o "${fname}" "${row.url.replace(/"/g, '\\"')}"`);
+    blocks.push(`curl -L -C - --fail --retry 5 --retry-delay 2 -o "${row.result_filename}" "${row.result_url.replace(/"/g, '\\"')}"`);
   }
   if (dryRun) {
     blocks.push(`EOF`);
   }
   blocks.push(``, `echo "Download completed!"`);
   return [...hdr, ...blocks].join('\n');
-}
-
-function generateManifest(downloadRows: { id: string, url: string, filename: string }[],
-  mode: 'fast' | 'final' | 'images',
-  quality: string,
-  failures: { id: string, reason: string }[]) {
-  const manifest = { rows: [], skipped: [], failures: [], mode: 'final', quality: 'source' } as { rows: { id: string; filename: string; url: string }[]; skipped: string[]; failures: { id: string; reason: string }[]; mode: string; quality: string };
-  manifest.rows = downloadRows.map(r => ({ id: r.id, filename: r.filename, url: r.url }));
-  manifest.failures = failures;
-  manifest.mode = mode;
-  manifest.quality = quality;
-  return manifest;
 }
 
 function triggerDownload(blob: Blob, filename: string) {
