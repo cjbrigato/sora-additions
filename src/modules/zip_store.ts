@@ -4,7 +4,6 @@ import { JSONManifest } from "./manifest";
 export type Meta = { name: string; size: number; crc: number; handle: FileSystemFileHandle };
 
 const scriptName = 'script.sh';
-const csvManifestName = 'manifest.csv';
 const jsonManifestName = 'manifest.json';
 
 const CRC_TABLE = (() => {
@@ -47,7 +46,7 @@ export async function opfsRemoveDir(root: FileSystemDirectoryHandle, name: strin
   try { await root.removeEntry(name, { recursive: true }); } catch { }
 }
 
-export async function writeManifestsToOPFS(jsonManifest: JSONManifest): Promise<Meta> {
+export async function writeManifestToOPFS(jsonManifest: JSONManifest): Promise<Meta> {
   const { root, dir, dirName } = await opfsBatchRoot();
   const jsonManifestString = JSON.stringify(jsonManifest, null, 2);
   const jsonManifestFile = await dir.getFileHandle(jsonManifestName, { create: true });

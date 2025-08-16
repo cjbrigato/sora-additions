@@ -15,7 +15,7 @@ import {
   emptySoraExtendedTasksMap,
 } from '../modules/sora_api';
 import {
-  downloadAllToOPFS, writeZipFromOPFS, opfsRemoveDir, writeManifestsToOPFS, writeScriptToOPFS
+  downloadAllToOPFS, writeZipFromOPFS, opfsRemoveDir, writeManifestToOPFS, writeScriptToOPFS
 } from '../modules/zip_store';
 import * as SoraTypes from '../modules/sora_types'
 import * as BatchManifest from '../modules/manifest'
@@ -424,7 +424,7 @@ async function runOnce() {
 
         if (settings.directZipManifest) {
           outPrintln(`# Writing manifest to OPFS...`)
-          const jsonMeta = await writeManifestsToOPFS(lastJsonManifest);
+          const jsonMeta = await writeManifestToOPFS(lastJsonManifest);
           metas.push(jsonMeta);
         }
         if (settings.directZipScript) {
