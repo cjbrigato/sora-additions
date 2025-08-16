@@ -9,6 +9,7 @@ import {
 } from '../modules/settings';
 import {
   filterGenerations, countValidTasks, fetchRawWithConcurrency,
+  filterTasks,
 } from '../modules/sora_api';
 import {
   downloadAllToOPFS, writeZipFromOPFS, opfsRemoveDir, writeManifestsToOPFS, writeScriptToOPFS
@@ -262,6 +263,9 @@ function wireUI() {
 }
 
 
+function outPrintln(text: string) {
+  refs.out.value += `${text}\n`;
+}
 
 // ---------- Run flow ----------
 async function runOnce() {
@@ -280,42 +284,54 @@ async function runOnce() {
 
   try {
     const listLimit = settings.directDownload ? settings.directMaxTasks : settings.limit;
-
+    outPrintln(`# Fetching & filtering list...`)
     refs.status.textContent = 'Step 1/3: Fetching & filtering list...';
 
     const resList = await send({ type: 'FETCH_LIST', limit: listLimit, tasktype: refs.tasktype.value });
     if (!resList?.ok) throw new Error(resList?.error || 'List fetch failed');
     const tasks: SoraTypes.Task[] = Array.isArray(resList.json?.task_responses) ? resList.json.task_responses : [];
 
+    const filteredTasks = filterTasks(tasks)
+    outPrintln(`# Filtered tasks: ${filteredTasks.tasks.length}`)
+    outPrintln(`# Pruning log: ${filteredTasks.pruning_log.length}`)
+    outPrintln(`# Skipped generations: ${filteredTasks.skipped_generations.length}`)
+
     const { valid } = filterGenerations(tasks);
     const validTasksCount = countValidTasks(tasks);
+    outPrintln(`# Valid tasks: ${validTasksCount}`)
+    outPrintln(`# Valid generations: ${valid.length}`)
     refs.status.textContent = `${valid.length} valid generations found.`;
 
-    let rows: { id: string; url: string; filename: string }[] = [];
+    let rows: { id: string; task_id: string; url: string; filename: string }[] = [];
     let failures: { id: string; reason: string }[] = [];
+
+    outPrintln(`# Task type: ${refs.tasktype.value}`)
 
     if (valid.length) {
       if (refs.tasktype.value === 'images') {
+        outPrintln(`# Extracting URLs directly (Images mode)...`)
         refs.status.textContent = 'Step 2/3: Extracting URLs directly (Images mode)...';
         rows = valid.map((gen) => {
           const url = (gen.url || null);
-          return url ? { id: gen.id, url, filename: `sora_${gen.task_id}_${gen.id}.png` } : null as any;
+          return url ? { id: gen.id, task_id: gen.task_id, url, filename: `sora_${gen.task_id}_${gen.id}.png` } : null as any;
         }).filter(Boolean);
         setPanelProgress(refs, 100, 'Extracted URLs', '');
         setLauncherPct(100);
       }
       else if (settings.fastDownload) {
+        outPrintln(`# Extracting URLs directly (Fast mode)...`)
         refs.status.textContent = 'Step 2/3: Extracting URLs directly (fast mode)...';
         rows = valid.map((gen) => {
           const q = settings.fastDownloadQuality;
           const url = (gen.encodings as any)?.[q]?.path || (gen as any)?.url
             || gen?.encodings?.source?.path || gen?.encodings?.md?.path || gen?.encodings?.ld?.path || null;
-          return url ? { id: gen.id, url, filename: `sora_${gen.task_id}_${gen.id}.mp4` } : null as any;
+          return url ? { id: gen.id, task_id: gen.task_id, url, filename: `sora_${gen.task_id}_${gen.id}.mp4` } : null as any;
         }).filter(Boolean);
         // step instantly “complete” → show 100%
         setPanelProgress(refs, 100, 'Extracted URLs', '');
         setLauncherPct(100);
       } else {
+        outPrintln(`# Fetching URLs...`)
         refs.status.textContent = 'Step 2/3: Fetching URLs...';
         // Show HUD + mini badge during /raw
         setPanelProgress(refs, 0, 'Fetching URLs (0/0)', '');
@@ -337,7 +353,9 @@ async function runOnce() {
             }
           }, send);
 
-        rows = successes.map(s => ({ id: s.id, url: s.url, filename: `sora_${s.task_id}_${s.id}.mp4` }));
+        outPrintln(`# Successes: ${successes.length}`)
+        outPrintln(`# Failures: ${f.length}`)
+        rows = successes.map(s => ({ id: s.id, task_id: s.task_id, url: s.url, filename: `sora_${s.task_id}_${s.id}.mp4` }));
         failures = f;
       }
 
@@ -348,6 +366,7 @@ async function runOnce() {
 
         if (settings.directZip) {
           // Phase A: DL → OPFS
+          outPrintln(`# Downloading ${rows.length} file(s) locally...`)
           refs.status.textContent = `Downloading ${rows.length} file(s) locally…`;
           const acDL = new AbortController(); currentAbort = acDL;
           const { root, dir, dirName, metas } = await downloadAllToOPFS({
@@ -368,8 +387,10 @@ async function runOnce() {
               }
             }
           });
+          outPrintln(`# Downloaded ${metas.length} file(s) locally...`)
 
           if (settings.directZipManifest || settings.directZipScript) {
+            outPrintln(`# Writing manifests to OPFS...`)
             const generateMode = refs.tasktype.value === 'images' ? 'images' : settings.fastDownload ? 'fast' : 'final';
             if (settings.directZipManifest) {
               const onceManifest = generateManifest(rows, generateMode, settings.fastDownload ? settings.fastDownloadQuality : 'n/a', failures);
@@ -382,14 +403,17 @@ async function runOnce() {
                 generateMode,
                 settings.fastDownload ? settings.fastDownloadQuality : 'n/a',
                 failures,
-                settings.dryRun
+                settings.dryRun,
+                refs.out.value.split('\n')
               );
+              outPrintln(`# Writing script to OPFS...`)
               const scriptMeta = await writeScriptToOPFS(onceScript);
               metas.push(scriptMeta);
             }
           }
 
           // Phase B: ZIP → one browser download
+          outPrintln(`# Preparing ZIP...`)
           const acZIP = new AbortController(); currentAbort = acZIP;
           setPanelProgress(refs, undefined, `Preparing ZIP…`, '');
           setMiniBadge(refs, `ZIP 0/${metas.length}`, 'zip');
@@ -424,6 +448,7 @@ async function runOnce() {
           });
 
           // final browser download
+          outPrintln(`# Final browser download...`)
           const zipFile = await (await dir.getFileHandle(zipName)).getFile();
           const blobUrl = URL.createObjectURL(zipFile);
           const a = document.createElement('a');
@@ -440,6 +465,7 @@ async function runOnce() {
 
         } else {
           // Direct via chrome.downloads
+          outPrintln(`# Direct via chrome.downloads...`)
           refs.status.textContent = `Direct: starting downloads for ${validTasksCount} task(s) (parallel ${settings.directParallel})…`;
           await send({ type: 'START_DIRECT_DOWNLOAD', items: rows, parallel: settings.directParallel, saveAs: settings.directSaveAs });
         }
@@ -452,7 +478,8 @@ async function runOnce() {
         generateMode,
         settings.fastDownload ? settings.fastDownloadQuality : 'n/a',
         failures,
-        settings.dryRun
+        settings.dryRun,
+        refs.out.value.split('\n')
       );
       refs.out.value = script;
       lastScript = script;
@@ -468,8 +495,9 @@ async function runOnce() {
       refs.exportBtn.style.display = rows.length > 0 ? 'inline-block' : 'none';
 
     } else {
+      outPrintln(`# No valid video generations found.`)
       refs.status.textContent = 'No valid video generations found.';
-      refs.out.value = '# No valid videos found.';
+      //refs.out.value = '# No valid videos found.';
     }
 
   } catch (err: any) {
@@ -496,7 +524,8 @@ function generateScript(
   mode: 'fast' | 'final' | 'images',
   quality: string,
   failures: { id: string, reason: string }[],
-  dryRun: boolean
+  dryRun: boolean,
+  log: string[]
 ) {
   const tasktypeDesc = mode === 'images' ? "Images" : mode === 'fast' ? `Fast Download (Watermarked, ${quality})` : "Final Quality (No Watermark)";
   const hdr = [
@@ -505,8 +534,14 @@ function generateScript(
     `# Mode: ${tasktypeDesc}`,
     `# Format: curl`,
     `# Generated: ${new Date().toISOString()}`,
-    ``
+    ``,
   ];
+  if (log.length) {
+    hdr.push(`# ----- LOG ----`);
+    hdr.push(...log);
+    hdr.push('');
+    hdr.push('# --- SCRIPT ---');
+  }
   const blocks: string[] = [];
   if (failures?.length) {
     blocks.push(`# --- FAILED during URL fetch ---`);

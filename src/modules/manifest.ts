@@ -30,6 +30,10 @@ export function makeManifestTask(task: SoraTypes.Task, generations: ManifestGene
     }
 }
 
+export function makeManifestTaskFromTaskAndGenerations(task: SoraTypes.Task, generations: { generation: SoraTypes.Generation, result_filename: string, result_url: string }[]): ManifestTask {
+    return makeManifestTask(task, generations.map(g => makeManifestGeneration(g.generation, g.result_filename, g.result_url)))
+}
+
 
 export function generateCSVManifestRows(tasks: ManifestTask[]): CSVManifestRow[] {
     let rows: CSVManifestRow[] = []

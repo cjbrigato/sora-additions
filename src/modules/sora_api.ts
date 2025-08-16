@@ -1,11 +1,60 @@
 import * as SoraTypes from './sora_types'
 
+
+export type SkippedGeneration = {id?:string, reason:string}
+export type PruneReason = 'task_not_succeeded' | 'no_remaining_generations' | 'partially_filtered_generations'
+export type PrunedTask =
+  | {
+      kind: 'total';
+      id?: string;
+      reason: Extract<PruneReason, 'task_not_succeeded' | 'no_remaining_generations'>;
+      skipped_generations?: SkippedGeneration[]; // optionnel: parfois vide
+    }
+  | {
+      kind: 'partial';
+      id?: string;
+      reason: Extract<PruneReason, 'partially_filtered_generations'>;
+      skipped_generations: SkippedGeneration[]; // partial => forcément non vide
+    };
+
+
+    export type FilteredTasks = {
+      tasks: SoraTypes.Task[];
+      pruning_log: PrunedTask[];            // log par tâche
+      skipped_generations: (SkippedGeneration & { task_id?: string })[]; // log “flat”
+    };
+
 export type GenMinimalSubset = {id:string,task_id:string}
-export type FilterGenerationsResult = {valid: SoraTypes.Generation[], skipped: {id?:string, reason:string}[]}
+export type FilterGenerationsResult = {valid: SoraTypes.Generation[], skipped: SkippedGeneration[]}
 export type SuccessfullRawResult = {id:string,task_id:string,url:string}
 export type FailedRawResult = {id:string,task_id:string,reason:string}
 export type FetchRawResult = {successes:SuccessfullRawResult[],failures:FailedRawResult[]}
 
+
+
+export function filterTasks(tasks: SoraTypes.Task[]):FilteredTasks {
+  const filteredTasks:FilteredTasks = {tasks:[],pruning_log:[],skipped_generations:[]}
+  // should splice the unsucceded tasks
+  for (const t of tasks) {
+    if (t?.status !== 'succeeded') {
+      filteredTasks.pruning_log.push({ kind: 'total', id:t?.id, reason:t?.failure_reason || 'task_not_succeeded' });
+      continue;
+    }
+    const filteredGenerations = filterGenerations([t])
+    t.generations = filteredGenerations.valid
+    if (t.generations.length > 0) {
+      filteredTasks.tasks.push(t)
+      if (filteredGenerations.skipped.length > 0) {
+        filteredTasks.pruning_log.push({ kind: 'partial', id:t?.id, skipped_generations:filteredGenerations.skipped, reason:('partially_filtered_generations')});
+      }
+    }
+    else {
+      filteredTasks.pruning_log.push({ kind: 'total', id:t?.id, skipped_generations:filteredGenerations.skipped, reason:('no_remaining_generations')});
+    }
+    filteredTasks.skipped_generations.push(...filteredGenerations.skipped.map(s => ({ id:s.id, task_id:t?.id, reason:s.reason })))
+  }
+  return filteredTasks;
+}
 
 export function filterGenerations(tasks: SoraTypes.Task[]):FilterGenerationsResult {
   const fileredResult:FilterGenerationsResult = {valid:[],skipped:[]}

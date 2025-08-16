@@ -1,5 +1,15 @@
 // Robust Authorization capture from page context (user gesture friendly)
 (function () {
+    // ==== Guard / idempotence ==================================================
+    const NS = '__SORA_PAGE_HOOK__';
+    if (window[NS]?.installed) {
+        console.log('Sora page hook already installed, skipping');
+        return;
+    }
+    console.log('Sora page hook installing');
+    window[NS] = window[NS] || {};
+    window[NS].installed = true;
+
     const orig = window.fetch;
     window.fetch = async function (...args) {
       try {
