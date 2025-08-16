@@ -1,14 +1,14 @@
 import * as SoraTypes from './sora_types'
 
-type CSVManifestRow = { id: string; task_id: string; filename: string; url: string }
-type CSVManifest = { rows: CSVManifestRow[]; skipped: string[]; failures: { id: string; reason: string }[]; mode: string; quality: string }
+export type CSVManifestRow = { id: string; task_id: string; filename: string; url: string }
+export type CSVManifest = { rows: CSVManifestRow[]; skipped: string[]; failures: { id: string; reason: string }[]; mode: string; quality: string }
 
-type ManifestGeneration = SoraTypes.Generation & { result_filename: string, result_url: string }
-type ManifestTask = SoraTypes.Task & { generations: ManifestGeneration[] }
+export type ManifestGeneration = SoraTypes.Generation & { result_filename: string, result_url: string }
+export type ManifestTask = SoraTypes.Task & { generations: ManifestGeneration[] }
 
-type JSONManifestGeneration = { id: string, filename: string, url: string }
-type JSONManifestTask = { id: string, generations: JSONManifestGeneration[] }
-type JSONManifest = { tasks: JSONManifestTask[], skipped: string[], failures: { id: string; reason: string }[]; mode: string; quality: string }
+export type JSONManifestGeneration = { id: string, filename: string, url: string }
+export type JSONManifestTask = { id: string, generations: JSONManifestGeneration[] }
+export type JSONManifest = { tasks: JSONManifestTask[], skipped: string[], failures: { id: string; reason: string }[]; mode: string; quality: string }
 
 export type Manifest = {
     csv: CSVManifest,
@@ -21,6 +21,14 @@ export function makeManifestGeneration(generation: SoraTypes.Generation, result_
         result_filename: result_filename,
         result_url: result_url
     }
+}
+
+export function emptyManifestTaskFromTask(task: SoraTypes.Task): ManifestTask {
+    return makeManifestTask(task, [])
+}
+
+export function appendManifestTask(task: ManifestTask, generation: ManifestGeneration): ManifestTask {
+    return makeManifestTask(task, [...task.generations, generation])
 }
 
 export function makeManifestTask(task: SoraTypes.Task, generations: ManifestGeneration[]): ManifestTask {

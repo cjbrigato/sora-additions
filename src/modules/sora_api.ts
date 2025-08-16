@@ -24,13 +24,34 @@ export type PrunedTask =
       skipped_generations: (SkippedGeneration & { task_id?: string })[]; // log “flat”
     };
 
-export type GenMinimalSubset = {id:string,task_id:string}
 export type FilterGenerationsResult = {valid: SoraTypes.Generation[], skipped: SkippedGeneration[]}
-export type SuccessfullRawResult = {id:string,task_id:string,url:string}
-export type FailedRawResult = {id:string,task_id:string,reason:string}
+export type SuccessfullRawResult = {generation:SoraTypes.Generation,url:string}
+export type FailedRawResult = {generation:SoraTypes.Generation,reason:string}
 export type FetchRawResult = {successes:SuccessfullRawResult[],failures:FailedRawResult[]}
 
 
+export type SoraGenerationExtended = SoraTypes.Generation & { result_filename: string, result_url: string }
+export type SoraTaskExtended = SoraTypes.Task & { generations: SoraGenerationExtended[] }
+
+
+export function extendSoraGeneration(generation: SoraTypes.Generation): SoraGenerationExtended {
+  let result_filename = '';
+  if (generation.task_type === 'image_gen'){
+    result_filename = `sora_${generation.task_id}_${generation.id}.png`;
+  } else if (generation.task_type === 'video_gen'){
+    result_filename = `sora_${generation.task_id}_${generation.id}.mp4`;
+  }
+  const result_url = generation.url || '';
+  return { ...generation, result_filename, result_url }
+}
+
+export function extendSoraTask(task: SoraTypes.Task): SoraTaskExtended {
+  return { ...task, generations: task.generations.map(extendSoraGeneration) }
+}
+
+export function extendSoraTasks(tasks: SoraTypes.Task[]): SoraTaskExtended[] {
+  return tasks.map(extendSoraTask)
+}
 
 export function filterTasks(tasks: SoraTypes.Task[]):FilteredTasks {
   const filteredTasks:FilteredTasks = {tasks:[],pruning_log:[],skipped_generations:[]}
@@ -85,26 +106,26 @@ export function countValidTasks(tasks: SoraTypes.Task[]) {
 }
 
 export async function fetchRawWithConcurrency(
-  gen_subsets: GenMinimalSubset[],
+  generations: SoraTypes.Generation[],
   concurrency: number,
   onProgress: (txt:string,pct:number)=>void,
   send: (p:any)=>Promise<any>
 ):Promise<FetchRawResult> {
-  const queue = gen_subsets.slice();
+  const queue = generations.slice();
   const result:FetchRawResult = {successes:[],failures:[]}
-  let processed = 0, total = gen_subsets.length;
+  let processed = 0, total = generations.length;
 
   async function worker() {
     while (queue.length) {
       const gen = queue.shift()!;
       const res = await send({ type: 'FETCH_RAW_ONE', id:gen.id });
-      if (res?.ok && res.url) result.successes.push({ id:gen.id, task_id:gen.task_id, url: res.url });
-      else result.failures.push({ id:gen.id, task_id:gen.task_id, reason: res?.error || 'Unknown error' });
+      if (res?.ok && res.url) result.successes.push({ generation:gen, url: res.url });
+      else result.failures.push({ generation:gen, reason: res?.error || 'Unknown error' });
       processed++;
       onProgress(`Step 2/3: Fetching URLs (${processed}/${total})`, total ? (processed/total*100) : 0);
     }
   }
   await Promise.all(Array(Math.min(concurrency, Math.max(1, total))).fill(0).map(worker));
-  result.successes.sort((a,b)=> gen_subsets.findIndex(g=>g.id===a.id)-gen_subsets.findIndex(g=>g.id===b.id));
+  result.successes.sort((a,b)=> generations.findIndex(g=>g.id===a.generation.id)-generations.findIndex(g=>g.id===b.generation.id));
   return result;
 }

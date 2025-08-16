@@ -16,6 +16,7 @@ import {
 } from '../modules/zip_store';
 import * as SoraTypes from '../modules/sora_types'
 import * as BatchManifest from '../modules/manifest'
+import { makeManifestTask, makeManifestTaskFromTaskAndGenerations } from '../modules/manifest';
 
 
 // ---------- Messaging helper ----------
@@ -296,11 +297,20 @@ async function runOnce() {
     outPrintln(`# Pruning log: ${filteredTasks.pruning_log.length}`)
     outPrintln(`# Skipped generations: ${filteredTasks.skipped_generations.length}`)
 
+    let manifestGenerations: BatchManifest.ManifestGeneration[] = [];
+    //map taskid to ManifestTask
+    const taskMap = new Map<string, BatchManifest.ManifestTask>();
+    for (const t of filteredTasks.tasks) {
+      taskMap.set(t.id, BatchManifest.emptyManifestTaskFromTask(t));
+    }
+
     const { valid } = filterGenerations(tasks);
     const validTasksCount = countValidTasks(tasks);
     outPrintln(`# Valid tasks: ${validTasksCount}`)
     outPrintln(`# Valid generations: ${valid.length}`)
     refs.status.textContent = `${valid.length} valid generations found.`;
+
+
 
     let rows: { id: string; task_id: string; url: string; filename: string }[] = [];
     let failures: { id: string; reason: string }[] = [];
@@ -315,6 +325,12 @@ async function runOnce() {
           const url = (gen.url || null);
           return url ? { id: gen.id, task_id: gen.task_id, url, filename: `sora_${gen.task_id}_${gen.id}.png` } : null as any;
         }).filter(Boolean);
+       
+        manifestGenerations = valid.map((gen) => {
+          const url = (gen.url || null);
+          return url ? BatchManifest.makeManifestGeneration(gen, `sora_${gen.task_id}_${gen.id}.png`, url) : null as any;
+        }).filter(Boolean);
+
         setPanelProgress(refs, 100, 'Extracted URLs', '');
         setLauncherPct(100);
       }
@@ -327,6 +343,15 @@ async function runOnce() {
             || gen?.encodings?.source?.path || gen?.encodings?.md?.path || gen?.encodings?.ld?.path || null;
           return url ? { id: gen.id, task_id: gen.task_id, url, filename: `sora_${gen.task_id}_${gen.id}.mp4` } : null as any;
         }).filter(Boolean);
+
+        manifestGenerations = valid.map((gen) => {
+          const q = settings.fastDownloadQuality;
+          const url = (gen.encodings as any)?.[q]?.path || (gen as any)?.url
+            || gen?.encodings?.source?.path || gen?.encodings?.md?.path || gen?.encodings?.ld?.path || null;
+          return url ? BatchManifest.makeManifestGeneration(gen, `sora_${gen.task_id}_${gen.id}.mp4`, url) : null as any;
+        }).filter(Boolean);
+
+
         // step instantly “complete” → show 100%
         setPanelProgress(refs, 100, 'Extracted URLs', '');
         setLauncherPct(100);
@@ -337,9 +362,8 @@ async function runOnce() {
         setPanelProgress(refs, 0, 'Fetching URLs (0/0)', '');
         setMiniBadge(refs, `URL 0/0`, 'dl');
 
-        const gen_subsets = valid.map(g => ({ id: g.id, task_id: g.task_id || '' }));
         const { successes, failures: f } =
-          await fetchRawWithConcurrency(gen_subsets, settings.workers, (text, pct) => {
+          await fetchRawWithConcurrency(valid, settings.workers, (text, pct) => {
             // Parse "(x/y)" to display counts
             const m = /(\d+)\s*\/\s*(\d+)\)/.exec(text);
             if (m) {
@@ -355,8 +379,9 @@ async function runOnce() {
 
         outPrintln(`# Successes: ${successes.length}`)
         outPrintln(`# Failures: ${f.length}`)
-        rows = successes.map(s => ({ id: s.id, task_id: s.task_id, url: s.url, filename: `sora_${s.task_id}_${s.id}.mp4` }));
-        failures = f;
+        rows = successes.map(s => ({ id: s.generation.id, task_id: s.generation.task_id, url: s.url, filename: `sora_${s.generation.task_id}_${s.generation.id}.mp4` }));
+        failures = f.map(f => ({ id: f.generation.id, reason: f.reason }));
+        manifestGenerations = successes.map(s => BatchManifest.makeManifestGeneration(s.generation, `sora_${s.generation.task_id}_${s.generation.id}.mp4`, s.url));
       }
 
       const doDirect = settings.directDownload && validTasksCount <= settings.directMaxTasks;
@@ -485,6 +510,24 @@ async function runOnce() {
       lastScript = script;
 
       lastManifest = generateManifest(rows, generateMode, settings.fastDownload ? settings.fastDownloadQuality : 'n/a', failures);
+
+      for (const mg of manifestGenerations) {
+        const task = taskMap.get(mg.task_id);
+        if (task) {
+          const newTask = BatchManifest.appendManifestTask(task, mg);
+          taskMap.set(mg.task_id, newTask);
+        } 
+      }
+      const manifestTasks = Array.from(taskMap.values());
+      lastBatchManifest = {
+        csv: BatchManifest.generateCSVManifest(manifestTasks, generateMode, settings.fastDownload ? settings.fastDownloadQuality : 'n/a', failures),
+        json: BatchManifest.generateJSONManifest(manifestTasks, generateMode, settings.fastDownload ? settings.fastDownloadQuality : 'n/a', failures)
+      }
+      let lastCSVManifest = BatchManifest.CSVManifestToCSV(lastBatchManifest.csv);
+      let lastJSONManifest = BatchManifest.JSONManifestToJSON(lastBatchManifest.json);
+      console.log(lastCSVManifest);
+      console.log(lastJSONManifest);
+
 
       let finalStatus = `Done! Script for ${rows.length} videos.`;
       if (failures.length) finalStatus += ` (${failures.length} failed).`;
